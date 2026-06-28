@@ -1,0 +1,3116 @@
+# Fichier ~\ESPHome\passe-partout.yaml
+
+esphome:
+  name: passe-partout
+  friendly_name: "Passe-Partout"
+
+# Attention, ici on change de puces : c'est un ESP32 classique !
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+api:
+  encryption:
+    key: !secret crypto_key_passe_partout
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Configuration des deux bus SPI physiques du CYD
+spi:
+  - id: spi_display
+    clk_pin: GPIO14
+    mosi_pin: GPIO13
+    miso_pin: GPIO12
+  - id: spi_touch
+    clk_pin: GPIO25
+    mosi_pin: GPIO32
+    miso_pin: GPIO39
+
+# Gestion du rétroéclairage de l'écran (Dimming)
+output:
+  - platform: ledc
+    pin: GPIO21
+    id: backlight_pwm
+
+  - platform: ledc
+    pin: GPIO26
+    id: buzzer_pwm
+
+  # LED RGB Arrière - Configuration des pins physiques (avec inversion intégrée)
+  - platform: ledc
+    pin: GPIO4
+    id: output_red
+    inverted: true
+  - platform: ledc
+    pin: GPIO16
+    id: output_green
+    inverted: true
+  - platform: ledc
+    pin: GPIO17
+    id: output_blue
+
+light:
+  - platform: monochromatic
+    output: backlight_pwm
+    name: "Rétroéclairage Écran"
+    id: cyd_backlight
+    restore_mode: ALWAYS_ON
+
+  # LED RGB Arrière
+  - platform: rgb
+    name: "LED Alerte Arrière"
+    id: led_alerte
+    #restore_mode: ALWAYS_OFF --> marche pas pour éteindre la DEL, mais faudrait essayer le contraire:
+    #restore_mode: ALWAYS_ON --> allume, d'une drôle de couleur!? Genre jaune-orange.
+    red: output_red
+    green: output_green
+    blue: output_blue
+
+# Haut-parleur (Générateur de sons RTTTL/Nokia)
+rtttl:
+  output: buzzer_pwm
+  id: mon_haut_parleur
+
+# =================================
+# CONFIGURATION DU COMPOSANT TEMPS
+# =================================
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    timezone: America/Toronto
+    # On ajoute la boucle de mise à jour à chaque seconde ici :
+    on_time:
+      - seconds: /1
+        then:
+          # Mise à jour de l'Heure Géante (HH:MM:SS)
+          - lvgl.label.update:
+              id: lbl_horloge_heure
+              text:
+                format: "%02d:%02d:%02d"
+                args: [ 'id(homeassistant_time).now().hour', 'id(homeassistant_time).now().minute', 'id(homeassistant_time).now().second' ]
+
+  - platform: homeassistant
+    id: temps_interne
+    on_time:
+      - seconds: 0
+        then:
+          - if:
+              condition:
+                lambda: |-
+                  auto t = id(temps_interne).now();
+                  return (id(reveil_active) && t.hour == id(reveil_heure) && t.minute == id(reveil_minute));
+              then:
+                - lambda: |-
+                    id(reveil_en_train_de_sonner) = true;
+                - script.execute: script_sonnerie_reveil
+                - lvgl.widget.show: popup_alarme
+                - light.turn_on:
+                    id: led_alerte
+                    red: 0%
+                    green: 0%
+                    blue: 100%
+
+# ======================================================
+# MÉMOIRE DE NAVIGATION (Savoir sur quelle page on est)
+# ======================================================
+globals:
+  - id: page_active
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: val_bat_cuisine
+    type: int
+    initial_value: '0'
+  - id: val_bat_pompe
+    type: int
+    initial_value: '0'
+  - id: val_bat_placard
+    type: int
+    initial_value: '0'
+  - id: val_bat_porte
+    type: int
+    initial_value: '0'
+  - id: val_bat_esc_bas
+    type: int
+    initial_value: '0'
+  - id: val_bat_esc_haut
+    type: int
+    initial_value: '0'
+  # Ce verrou passe à 'true' quand on clique sur OK. Il bloque la sirène.
+  - id: alerte_air_muette
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: alerte_cpu_muette
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: popup_actif
+    type: bool
+    initial_value: 'false'
+  - id: chrono_running
+    type: bool
+    initial_value: 'false'
+  - id: chrono_seconds
+    type: int
+    initial_value: '0'
+  - id: timer_running
+    type: bool
+    initial_value: 'false'
+  - id: timer_seconds
+    type: int
+    initial_value: '300' # 5 minutes par défaut
+  - id: reveil_active
+    type: bool
+    initial_value: 'false'
+  - id: reveil_heure
+    type: int
+    initial_value: '6'
+  - id: reveil_minute
+    type: int
+    initial_value: '30'
+  - id: reveil_en_train_de_sonner
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: chrono_millis_depart
+    type: uint32_t
+    initial_value: '0'
+  - id: chrono_millis_total
+    type: uint32_t
+    initial_value: '0'
+  - id: chrono_en_marche
+    type: bool
+    initial_value: 'false'
+  - id: volume_distant
+    type: float
+    initial_value: '60.0'
+  - id: blocage_initial
+    type: bool
+    initial_value: 'true'
+
+# BANQUE DE SONS (Scripts réutilisables partout)
+script:
+  # Bip simple discret (Changement de page)
+  - id: bip_discret
+    mode: restart
+    then:
+      - rtttl.play: "click:d=4,o=4,b=250:32c" # Clic Sourd et court (Octave 4, note de 32)
+      # clic Pock mécanique (Octave 3, note Sol g): "click:d=4,o=3,b=250:32g"
+      # Une seule note très rapide: "click:d=4,o=5,b=200:16c" 
+      # Pour un Bip moyen: "bip:d=4,o=5,b=120:16p,16e6"
+
+  # Double bip rapide (Confirmation d'action)
+  - id: double_bip
+    mode: restart
+    then:
+      - rtttl.play: "double:d=4,o=5,b=150:16e6,16p,16e6"
+
+  # Sirène alternée (Alerte critique : Fuite ou Température)
+  - id: sirene_alerte
+    mode: restart
+    then:
+      - rtttl.play: "alerte:d=4,o=5,b=180:8e6,8c6,8e6,8c6,8e6,8c6"
+
+  # Sirène en boucle (Alerte critique : Fuite ou Température)
+  - id: sirene_boucle
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return id(popup_actif);'
+          then:
+            - light.turn_on:
+                id: led_alerte
+                red: 100%
+                green: 0%
+                blue: 0%
+            - rtttl.play: "sirène:d=4,o=5,b=150:8c,8d,8c,8d"
+            - delay: 3s
+            - light.turn_off:
+                id: led_alerte
+            - delay: 0.5s
+
+  # Sonnerie pour le Réveil-Matin - Sonne en Boucle
+  - id: script_sonnerie_reveil
+    mode: restart
+    then:
+      - while:
+          condition:
+            - lambda: 'return id(reveil_en_train_de_sonner);'
+          then:
+            - light.turn_on:
+                id: led_alerte
+                red: 0%
+                green: 0%
+                blue: 100%
+            - rtttl.play: "bip:d=4,o=4,b=250:32c"
+            - delay: 150ms
+            - rtttl.play: "bip:d=4,o=4,b=250:32c"
+            - delay: 150ms
+            - rtttl.play: "bip:d=4,o=4,b=250:32c"
+            - delay: 150ms
+            - rtttl.play: "bip:d=4,o=4,b=250:32c"
+            - delay: 1s  # Pause d'une seconde entre les séries de bips
+            - light.turn_off:
+                id: led_alerte
+            - delay: 0.5s
+
+# ==============================================
+# DÉCLARATION DES POLICES DE CARACTÈRES (FONTS)
+# ==============================================
+font:
+  - file: "Roboto.ttf"
+    id: font_normal
+    size: 16
+    glyphs:
+      - "°"
+      - "’"
+      - '"'
+      - "'"
+      - 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/|,.:;!? @<>&%+_=$^`~'
+      - '()[\]{}-–'
+      - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
+      - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
+
+  - file: "Roboto.ttf"
+    id: font_titre
+    size: 24
+    glyphs:
+      - "°"
+      - "’"
+      - '"'
+      - "'"
+      - 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/|,.:;!? @<>&%+_=$^`~'
+      - '()[\]{}-–'
+      - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
+      - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
+
+  - file: "Roboto.ttf"
+    id: font_gros
+    size: 38 # pour les gros chiffres de température ou de batterie !
+    glyphs:
+      - "°"
+      - "’"
+      - '"'
+      - "'"
+      - 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/|,.:;!? @<>&%+_=$^`~'
+      - '()[\]{}-–'
+      - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
+      - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
+
+  - file: "Roboto.ttf"
+    id: font_enorme
+    size: 44
+    glyphs:
+      - "°"
+      - "’"
+      - '"'
+      - "'"
+      - 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/|,.:;!? @<>&%+_=$^`~'
+      - '()[\]{}-–'
+      - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
+      - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
+
+  - file: "Roboto.ttf"
+    id: font_geante
+    size: 75
+    glyphs: "0123456789:" # On génère uniquement chiffres et deux-points pour économiser la mémoire
+
+  - file: "ubuntu.ttf"
+    id: font_ubuntu_media
+    size: 14
+    glyphs:
+      - "°"
+      - "’"
+      - '"'
+      - "'"
+      - 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/|,.:;!? @<>&%+_=$^`~'
+      - '()[\]{}-–'
+      - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
+      - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
+
+# Écran branché sur son bus dédié
+display:
+  - platform: ili9xxx
+    spi_id: spi_display
+    model: ILI9341
+    invert_colors: false
+    cs_pin: GPIO15
+    dc_pin: GPIO2
+    id: cyd_display
+
+# Tactile branché sur son bus dédié
+touchscreen:
+  - platform: xpt2046
+    spi_id: spi_touch
+    cs_pin: GPIO33
+    interrupt_pin: GPIO36
+    update_interval: 50ms
+    threshold: 400
+    id: cyd_touch
+    calibration:
+      x_min: 290
+      x_max: 3880
+      y_min: 340
+      y_max: 3840
+    transform:
+      swap_xy: false
+      mirror_x: true
+      mirror_y: false
+
+# =========================================================
+# TOUS TES CAPTEURS NUMÉRIQUES (Mélange Interne CYD et HA)
+# =========================================================
+sensor:
+  # Photorésistance INTERNE (onboard) du CYD
+  - platform: adc
+    pin: GPIO34
+    id: cyd_ldr
+    name: "Lumière Ambiante CYD"
+    update_interval: 2s # Un peu plus rapide (2s) pour capter la lampe de poche sans attendre
+    attenuation: 11db
+    filters:
+      # 1. On lisse les lectures pour éliminer le bruit (fini le flicker !)
+      - sliding_window_moving_average:
+          window_size: 5
+          send_every: 1
+          
+      # 2. Calibrage propre (du plus petit au plus grand en entrée)
+      # Plus la tension baisse (proche de 0), plus il y a de lumière.
+      # Plus la tension monte (proche de 3), plus il fait noir.
+      - calibrate_linear:
+          - 0.2 -> 1.0  # Forte lumière (basse tension brute) = Écran à 100%
+          - 3.0 -> 0.1  # Noirceur (haute tension brute) = Écran à 10%
+          
+      # 3. Sécurité : On force la valeur à RESTER entre 10% et 100% quoi qu'il arrive
+      - clamp:
+          min_value: 0.1
+          max_value: 1.0
+          
+    on_value:
+      then:
+        - light.control:
+            id: cyd_backlight
+            brightness: !lambda "return x;"
+
+  # --- À partir d'ici, on fusionne tes capteurs Home Assistant ---
+  
+  # --- SOUS-PAGE : CLIMAT ---
+  - platform: homeassistant
+    id: temp_salon
+    entity_id: sensor.smart_air_salon_temperature
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_salon_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_salon).state', 'id(hum_salon).state' ]
+
+  - platform: homeassistant
+    id: hum_salon
+    entity_id: sensor.smart_air_salon_humidity
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_salon_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_salon).state', 'id(hum_salon).state' ]
+
+  - platform: homeassistant
+    id: temp_verriere
+    entity_id: sensor.pico_verriere_temperature_verriere
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_verriere_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_verriere).state', 'id(hum_verriere).state' ]
+
+  - platform: homeassistant
+    id: hum_verriere
+    entity_id: sensor.pico_verriere_humidite_verriere
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_verriere_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_verriere).state', 'id(hum_verriere).state' ]
+
+  - platform: homeassistant
+    id: temp_toronto
+    entity_id: sensor.toronto_temperature
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_toronto_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_toronto).state', 'id(hum_toronto).state' ]
+
+  - platform: homeassistant
+    id: hum_toronto
+    entity_id: sensor.toronto_humidite
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_toronto_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_toronto).state', 'id(hum_toronto).state' ]
+
+  - platform: homeassistant
+    id: temp_sous_sol
+    entity_id: sensor.thermo_hygrometre_sous_sol_temperature
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_sous_sol_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_sous_sol).state', 'id(hum_sous_sol).state' ]
+
+  - platform: homeassistant
+    id: hum_sous_sol
+    entity_id: sensor.thermo_hygrometre_sous_sol_humidity
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_sous_sol_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_sous_sol).state', 'id(hum_sous_sol).state' ]
+
+  - platform: homeassistant
+    id: temp_garage
+    entity_id: sensor.smart_air_garage_temperature
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_garage_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_garage).state', 'id(hum_garage).state' ]
+
+  - platform: homeassistant
+    id: hum_garage
+    entity_id: sensor.smart_air_garage_humidity
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_garage_stats
+          text:
+            format: "%.1f°C / %.0f%%"
+            args: [ 'id(temp_garage).state', 'id(hum_garage).state' ]
+
+  # --- SOUS-PAGE : BATTERIES ---
+  - platform: homeassistant
+    id: bat_cuisine
+    entity_id: sensor.detecteur_fuite_cuisine_battery
+    internal: true
+    on_value:
+      - globals.set:
+          id: val_bat_cuisine
+          value: !lambda "return (int)x;"
+      - lvgl.label.update:
+          id: lbl_pct_cuisine
+          text:
+            format: "%.0f%%"
+            args: [ 'x' ]
+
+  - platform: homeassistant
+    id: bat_pompe
+    entity_id: sensor.detecteur_fuite_pompe_battery
+    internal: true
+    on_value:
+      - globals.set:
+          id: val_bat_pompe
+          value: !lambda "return (int)x;"
+      - lvgl.label.update:
+          id: lbl_pct_pompe
+          text:
+            format: "%.0f%%"
+            args: [ 'x' ]
+
+  - platform: homeassistant
+    id: bat_placard
+    entity_id: sensor.detecteur_placard_entree_battery
+    internal: true
+    on_value:
+      - globals.set:
+          id: val_bat_placard
+          value: !lambda "return (int)x;"
+      - lvgl.label.update:
+          id: lbl_pct_placard
+          text:
+            format: "%.0f%%"
+            args: [ 'x' ]
+
+  - platform: homeassistant
+    id: bat_porte
+    entity_id: sensor.detecteur_porte_entree_battery
+    internal: true
+    on_value:
+      - globals.set:
+          id: val_bat_porte
+          value: !lambda "return (int)x;"
+      - lvgl.label.update:
+          id: lbl_pct_porte
+          text:
+            format: "%.0f%%"
+            args: [ 'x' ]
+
+  - platform: homeassistant
+    id: bat_esc_bas
+    entity_id: sensor.detecteur_escalier_bas_battery
+    internal: true
+    on_value:
+      - globals.set:
+          id: val_bat_esc_bas
+          value: !lambda "return (int)x;"
+      - lvgl.label.update:
+          id: lbl_pct_esc_bas
+          text:
+            format: "%.0f%%"
+            args: [ 'x' ]
+
+  - platform: homeassistant
+    id: bat_esc_haut
+    entity_id: sensor.detecteur_escalier_haut_battery
+    internal: true
+    on_value:
+      - globals.set:
+          id: val_bat_esc_haut
+          value: !lambda "return (int)x;"
+      - lvgl.label.update:
+          id: lbl_pct_esc_haut
+          text:
+            format: "%.0f%%"
+            args: [ 'x' ]
+
+  # --- SOUS-PAGE : MACHINE (System Monitor) ---
+  - platform: homeassistant
+    id: val_cpu
+    entity_id: sensor.system_monitor_utilisation_du_processeur
+    internal: true
+
+  - platform: homeassistant
+    id: val_ram
+    entity_id: sensor.system_monitor_utilisation_de_la_memoire
+    internal: true
+
+  - platform: homeassistant
+    id: val_temp
+    entity_id: sensor.system_monitor_temperature_du_processeur
+    internal: true
+    on_value:
+      - if:
+          condition:
+            lambda: 'return (id(val_temp).state > 60.0 && !id(alerte_cpu_muette));'
+          then:
+            # On change le texte pour le CPU !
+            - lvgl.label.update:
+                id: popup_texte
+                text: "Surchauffe : Le CPU dépasse 60°C !"
+            - lvgl.widget.show: popup_alerte
+            - light.turn_on:
+                id: led_alerte
+                red: 100%
+                green: 0%
+                blue: 0%
+            - globals.set: { id: popup_actif, value: 'true' }
+            - script.execute: sirene_boucle
+            # Silence radio d'une heure spécifique au CPU
+            - globals.set: { id: alerte_cpu_muette, value: 'true' }
+            - delay: 60min
+            - globals.set: { id: alerte_cpu_muette, value: 'false' }
+
+  - platform: homeassistant
+    id: val_disque
+    entity_id: sensor.system_monitor_utilisation_du_disque
+    internal: true
+
+  # --- SOUS-PAGE : UPS-Hydro ---
+  # UPS Batterie
+  - platform: homeassistant
+    id: ups_batterie
+    entity_id: sensor.amazon_ups_charge_de_la_batterie
+    on_value:
+      then:
+        - lvgl.bar.update:
+            id: bar_ups_batterie
+            value: !lambda "return x;"
+        - lvgl.label.update:
+            id: lbl_ups_batt_txt
+            text: !lambda 'return str_sprintf("%d%%", (int)x);'
+
+  # Consommation Totale Maison Journalière Hier ---
+  - platform: homeassistant
+    id: hydro_total_jour
+    entity_id: sensor.maison_hydro_quebec_chalet_consommation_journaliere
+    accuracy_decimals: 0
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_hydro_total_jour_val
+            text: !lambda 'return str_sprintf("Conso-Hydro-Hier: %.0f kWh", x);'
+
+  # Appareil 1 : Déshumidificateur
+  - platform: homeassistant
+    id: energy_deshumidificateur
+    entity_id: sensor.salle_sous_sol_prise_deshumidificateur_deshumidificateur_quotidien
+    accuracy_decimals: 2
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_deshum_val
+            text: !lambda 'return str_sprintf("%.2f kWh", x);'
+        - lvgl.bar.update:
+            id: bar_deshum
+            # Ruse : Si ta conso max estimée par jour est de 5 kWh, on multiplie par 20 pour remplir la barre à 100% (5 * 20 = 100)
+            value: !lambda "return x * 10;" 
+
+  # Appareil 2 : Pompe à Eau
+  - platform: homeassistant
+    id: energy_pompe
+    entity_id: sensor.switch_pompe_energy
+    accuracy_decimals: 2
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_pompe_val
+            text: !lambda 'return str_sprintf("%.2f kWh", x);'
+        - lvgl.bar.update:
+            id: bar_pompe
+            value: !lambda "return x * 10;"
+
+  # Appareil 3 : Frigo Garage
+  - platform: homeassistant
+    id: energy_garage
+    entity_id: sensor.garage_prise_palier_garage_frigo_quotidien
+    accuracy_decimals: 2
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_garage_val
+            text: !lambda 'return str_sprintf("%.2f kWh", x);'
+        - lvgl.bar.update:
+            id: bar_garage
+            value: !lambda "return x * 10;"
+
+  # Appareil 4 : Fontaine
+  - platform: homeassistant
+    id: energy_fontaine
+    entity_id: sensor.dehors_prise_garage_prise_fontaine_quotidien
+    accuracy_decimals: 2
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_fontaine_val
+            text: !lambda 'return str_sprintf("%.2f kWh", x);'
+        - lvgl.bar.update:
+            id: bar_fontaine
+            value: !lambda "return x * 10;"
+
+  # Sous-Page Centre Média
+  # Pour le Contrôle du Volume
+  - platform: homeassistant
+    id: jbl_volume_level
+    # On vise le vrai lecteur média directement :
+    entity_id: media_player.salle_de_sejour_2
+    attribute: volume_level
+    on_value:
+      then:
+        - globals.set:
+            id: volume_distant
+            # Le volume HA est entre 0.0 et 1.0, on le multiplie par 100 pour le slider
+            value: !lambda "return x * 100.0;"
+        - globals.set:
+            id: blocage_initial
+            value: 'false'
+
+# =====================================================================
+# LES AUTRES GRANDES FAMILLES (en dehors de sensor:)
+# =====================================================================
+
+text_sensor:
+  # --- SOUS-PAGE : CLIMAT (Pour l'icône météo dynamique) ---
+  - platform: homeassistant
+    id: meteo_condition
+    entity_id: weather.home 
+    internal: true
+
+  - platform: homeassistant
+    id: texte_calendrier
+    entity_id: sensor.agenda_cyd_formate  # On vise le template formaté !
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_agenda_complet
+          text:
+            format: "%s"
+            args: [ 'x.c_str()' ]
+
+  - platform: homeassistant
+    id: weather_resume
+    entity_id: sensor.toronto_resume
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_previsions_txt
+            text: !lambda |-
+              std::string s = x;
+              size_t pos;
+              // Remplace chaque apostrophe droite par une apostrophe courbe UTF-8
+              while ((pos = s.find('\'')) != std::string::npos) {
+                s.replace(pos, 1, "’");
+              }
+              return s;
+
+  - platform: homeassistant
+    id: date_francaise_ha
+    entity_id: sensor.date_longue_cyd
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_horloge_date
+          text: !lambda "return x.c_str();"
+
+  # --- SOUS-PAGE : UPS-Hydro ---
+  # Statut de l'UPS (En ligne, Sur batterie, etc.)
+  - platform: homeassistant
+    id: ups_etat
+    entity_id: sensor.amazon_ups_etat
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_ups_etat_val
+            text: !lambda "return x;"
+
+  # --- Sous-page Centre Media
+  - platform: homeassistant
+    name: "Titre Musique CYD"
+    entity_id: sensor.passe_partout_titre_actuel
+    id: titre_musique
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: label_titre
+            text: !lambda |-
+              std::string s = x;
+              size_t pos;
+              // Remplace chaque apostrophe droite par une apostrophe courbe UTF-8
+              while ((pos = s.find('\'')) != std::string::npos) {
+                s.replace(pos, 1, "’");
+              }
+              return s;
+
+  - platform: homeassistant
+    name: "Artiste Musique CYD"
+    entity_id: sensor.passe_partout_artiste_actuel
+    id: artiste_musique
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: label_artiste
+            text: !lambda |-
+              std::string s = x;
+              size_t pos;
+              // Remplace chaque apostrophe droite par une apostrophe courbe UTF-8
+              while ((pos = s.find('\'')) != std::string::npos) {
+                s.replace(pos, 1, "’");
+              }
+              return s;
+
+switch:
+  # --- SOUS-PAGE : LUMIÈRES & PRISES ---
+  - platform: homeassistant
+    id: sw_entree_avant
+    entity_id: light.lumiere_entree_avant
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_entree_avant
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_entree_avant
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_placard_entree
+    entity_id: light.lumiere_placard_entree
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_placard_entree
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_placard_entree
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_dels_poteau
+    entity_id: light.dels_poteau_avant
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_dels_poteau
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_dels_poteau
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_palier_garage
+    entity_id: switch.prise_palier_garage
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_palier_garage
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_palier_garage
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_pompe
+    entity_id: switch.switch_pompe
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_pompe
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_pompe
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_prise_garage
+    entity_id: switch.prise_garage
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_prise_garage
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_prise_garage
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_porte_garage
+    entity_id: switch.pico_garage_porte_de_garage
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update:
+          id: btn_porte_garage
+          state:
+            checked: true
+    on_turn_off:
+      - lvgl.widget.update:
+          id: btn_porte_garage
+          state:
+            checked: false
+
+  - platform: homeassistant
+    id: sw_prise_chambre_1
+    entity_id: switch.prise_chambre_1
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update: { id: btn_prise_chambre_1, state: { checked: true } }
+    on_turn_off:
+      - lvgl.widget.update: { id: btn_prise_chambre_1, state: { checked: false } }
+
+  - platform: homeassistant
+    id: sw_prise_fenetre_garage
+    entity_id: switch.prise_fenetre_garage
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update: { id: btn_prise_fenetre_garage, state: { checked: true } }
+    on_turn_off:
+      - lvgl.widget.update: { id: btn_prise_fenetre_garage, state: { checked: false } }
+
+  - platform: homeassistant
+    id: sw_prise_salon
+    entity_id: switch.prise_salon
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update: { id: btn_prise_salon, state: { checked: true } }
+    on_turn_off:
+      - lvgl.widget.update: { id: btn_prise_salon, state: { checked: false } }
+
+  - platform: homeassistant
+    id: sw_prise_poteau_avant
+    entity_id: switch.prise_poteau_avant
+    internal: true
+    on_turn_on:
+      - lvgl.widget.update: { id: btn_prise_poteau_avant, state: { checked: true } }
+    on_turn_off:
+      - lvgl.widget.update: { id: btn_prise_poteau_avant, state: { checked: false } }
+
+# =====================================================================
+# BLOC DE RAFRAÎCHISSEMENT AUTOMATIQUE (À AJOUTER)
+# =====================================================================
+interval:
+  - interval: 1s
+    then:
+      # Mise à jour des textes de la page MACHINE
+      - lvgl.label.update:
+          id: lbl_txt_cpu
+          text: !lambda |-
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f%%", id(val_cpu).state);
+            return std::string(buf);
+
+      - lvgl.label.update:
+          id: lbl_txt_ram
+          text: !lambda |-
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f%%", id(val_ram).state);
+            return std::string(buf);
+
+      - lvgl.label.update:
+          id: lbl_txt_disque
+          text: !lambda |-
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.0f%%", id(val_disque).state);
+            return std::string(buf);
+
+      - lvgl.label.update:
+          id: lbl_txt_temp
+          text: !lambda |-
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%.1f°C", id(val_temp).state);
+            return std::string(buf);
+
+      # Moteur du Timer (Compte à rebours)
+      - lambda: |-
+          // On ne décrémente QUE si le timer est démarré ET supérieur à zéro
+          if (id(timer_running) && id(timer_seconds) > 0) {
+            id(timer_seconds)--;
+          }
+      - lvgl.label.update:
+          id: lbl_timer_temps
+          text: !lambda |-
+            int mins = id(timer_seconds) / 60;
+            int secs = id(timer_seconds) % 60;
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%02d:%02d", mins, secs);
+            return std::string(buf);
+            
+      # Action instantanée lorsque la minuterie vient de se terminer
+      - if:
+          condition:
+            lambda: 'return id(timer_seconds) == 0 && id(timer_running);'
+          then:
+            - lambda: |-
+                id(timer_running) = false;            // On arrête le moteur
+                id(reveil_en_train_de_sonner) = true; // On lève le drapeau de la sonnerie
+            - script.execute: script_sonnerie_reveil   # On lance le bip-bip-bip en boucle
+            - lvgl.widget.show: popup_alarme          # On fait surgir le popup au premier plan !
+            - light.turn_on:
+                id: led_alerte
+                red: 0%
+                green: 0%
+                blue: 100%
+
+  - interval: 10s
+    startup_delay: 0s
+    then:
+      - homeassistant.service:
+          service: homeassistant.update_entity
+          data:
+            entity_id: media_player.salle_de_sejour_2
+      - delay: 500ms
+      - lvgl.widget.redraw:
+          id: volume_slider
+
+  - interval: 50ms
+    then:
+      - if:
+          condition:
+            lambda: 'return id(chrono_running);'
+          then:
+            - lvgl.label.update:
+                id: lbl_chrono_temps
+                text: !lambda |-
+                  // On calcule le temps précis écoulé depuis le départ
+                  uint32_t actuel = millis() - id(chrono_millis_depart);
+                  uint32_t total_centi = actuel / 10; // Convertit les ms en centièmes
+                  
+                  int mins = total_centi / 6000;
+                  int secs = (total_centi % 6000) / 100;
+                  int centi = total_centi % 100;
+                  
+                  char buf[32];
+                  snprintf(buf, sizeof(buf), "%02d:%02d:%02d", mins, secs, centi);
+                  return std::string(buf);
+
+# MOTEUR GRAPHIQUE : Version Dashboard à 4 gros boutons
+lvgl:
+  displays:
+    - cyd_display
+  touchscreens:
+    - cyd_touch
+  
+  rotation: 90
+  theme:
+    dark_mode: true
+
+  # Top_layer permet au popup de s'afficher PAR-DESSUS n'importe quelle page !
+  top_layer:
+    widgets:
+      - obj:
+          id: popup_alerte
+          x: 20
+          y: 40
+          width: 280
+          height: 160
+          hidden: true
+          bg_color: 0x1A1A1A
+          border_width: 2
+          border_color: 0xFF0000
+          radius: 8
+          # --- LES DEUX LIGNES MAGIQUES ANTI-SCROLL ---
+          scrollbar_mode: LV_SCROLLBAR_MODE_OFF
+          scrollable: false
+          widgets:
+            - label:
+                id: popup_texte
+                text: "Une anomalie a été détectée."
+                x: 10
+                y: 15
+                width: 260
+                text_font: font_normal
+                align: LV_ALIGN_TOP_MID
+                text_align: LV_TEXT_ALIGN_CENTER
+
+            - button:
+                id: popup_bouton_ok
+                x: 0
+                y: -15             # Changé en négatif pour le remonter proprement du bas
+                width: 100
+                height: 40
+                align: LV_ALIGN_BOTTOM_MID
+                bg_color: 16711680
+                radius: 5
+                widgets:
+                  - label:
+                      text: "OK"
+                      text_font: font_normal
+                      align: LV_ALIGN_CENTER
+                on_click:
+                  - light.turn_on:
+                      id: led_alerte
+                      red: 0%
+                      green: 0%
+                      blue: 100%
+                  - globals.set: { id: popup_actif, value: 'false' }
+                  - lambda: "id(mon_haut_parleur).stop();"
+                  - lvgl.widget.hide: popup_alerte
+
+      - obj:
+          id: popup_alarme
+          x: 20
+          y: 40
+          width: 280
+          height: 160
+          hidden: true
+          bg_color: 0x1A1A1A
+          border_width: 2
+          border_color: 0xE74C3C
+          radius: 8
+          # --- LES DEUX LIGNES MAGIQUES ANTI-SCROLL ---
+          scrollbar_mode: LV_SCROLLBAR_MODE_OFF
+          scrollable: false
+          widgets:
+            - label:
+                id: popup_alarme_texte
+                text: "Il est Temps !"
+                x: 0
+                y: 25
+                width: 280
+                text_font: font_normal
+                align: LV_ALIGN_TOP_MID
+                text_align: LV_TEXT_ALIGN_CENTER
+                text_color: 0xE74C3C
+            - button:
+                id: popup_alarme_bouton_ok
+                x: 0
+                y: -15             # Remonté ici aussi !
+                width: 140
+                height: 40
+                align: LV_ALIGN_BOTTOM_MID
+                bg_color: 0xE74C3C
+                radius: 5
+                widgets:
+                  - label:
+                      text: "ARRÊTER"
+                      text_font: font_normal
+                      align: LV_ALIGN_CENTER
+                on_click:
+                  - light.turn_on:
+                      id: led_alerte
+                      red: 0%
+                      green: 0%
+                      blue: 100%
+                  - script.execute: bip_discret
+                  - lambda: |-
+                      id(reveil_en_train_de_sonner) = false;
+                  - lvgl.widget.hide: popup_alarme
+
+  pages:
+    # PAGE D'ACCUEIL : Menu Principal
+    - id: page_menu
+      widgets:
+        - button:
+            id: btn_climat
+            x: 15
+            y: 12
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "Climat"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_climat
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        - button:
+            id: btn_appareils
+            x: 15
+            y: 69
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "Appareils"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_appareils
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        - button:
+            id: btn_batteries
+            x: 15
+            y: 126
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "Batteries"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              # (Mise à jour des variables globales des batteries)
+              - lvgl.bar.update: { id: bar_bat_cuisine, value: !lambda "return id(val_bat_cuisine);" }
+              - lvgl.bar.update: { id: bar_bat_pompe, value: !lambda "return id(val_bat_pompe);" }
+              - lvgl.bar.update: { id: bar_bat_placard, value: !lambda "return id(val_bat_placard);" }
+              - lvgl.bar.update: { id: bar_bat_porte, value: !lambda "return id(val_bat_porte);" }
+              - lvgl.bar.update: { id: bar_bat_esc_bas, value: !lambda "return id(val_bat_esc_bas);" }
+              - lvgl.bar.update: { id: bar_bat_esc_haut, value: !lambda "return id(val_bat_esc_haut);" }
+              - lvgl.page.show: { id: page_batteries, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        - button:
+            id: btn_machine
+            x: 15
+            y: 183
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "CM4-ioBoard"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.arc.update: { id: arc_cpu, value: !lambda "return id(val_cpu).state;" }
+              - lvgl.arc.update: { id: arc_ram, value: !lambda "return id(val_ram).state;" }
+              - lvgl.arc.update: { id: arc_disque, value: !lambda "return id(val_disque).state;" }
+              - lvgl.arc.update: { id: arc_temp, value: !lambda "return id(val_temp).state;" }
+              - lvgl.page.show: { id: page_machine, animation: LV_SCREEN_LOAD_ANIM_NONE }
+        
+        # Widget Date & Heure (Pas un bouton, un affichage passif)
+        #- label:
+        #    id: lbl_menu_heure
+        #    text: "00:00"
+        #    align: LV_ALIGN_TOP_LEFT # On repart d'un alignement standard à gauche
+        #    x: 170 # Début exact de la colonne de droite
+        #    y: 12
+        #    width: 135 # Largeur de la colonne
+        #    text_align: CENTER # C'est cette propriété qui centre le TEXTE dans sa boîte !
+        #    text_font: font_titre
+        #- label:
+        #    id: lbl_menu_date
+        #    text: "--/--"
+        #    align: LV_ALIGN_TOP_LEFT
+        #    x: 170
+        #    y: 38
+        #    width: 135
+        #    text_align: CENTER # Centre le texte horizontalement
+        #    text_font: font_normal
+
+        # Bouton UPS - Hydro
+        - button:
+            id: btn_ups_hydro
+            x: 170 # Aligne-le à la place de ton choix dans la grille
+            y: 12  # Selon la disposition de tes 4 gros boutons
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "UPS - Hydro"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_ups_hydro
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # Bouton Centre Média
+        - button:
+            id: btn_centre_media
+            x: 170
+            y: 69
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "Musique JBL"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: { id: page_media, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        # Bouton Calendrier
+        - button:
+            id: btn_calendrier
+            x: 170
+            y: 126
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "Calendrier"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: { id: page_calendrier, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        # Bouton Horloge Plein Écran
+        - button:
+            id: btn_horloge
+            x: 170
+            y: 183
+            width: 135
+            height: 45
+            widgets:
+              - label:
+                  text: "Horloge"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: { id: page_horloge, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+    # SOUS-PAGE : Climat
+    - id: page_climat
+      bg_color: 0x101010
+      widgets:
+        # Bouton de navigation "Météo"
+        - button:
+            x: 5
+            y: 5
+            width: 245
+            height: 40
+            bg_color: 0x1B8A5A  # Vert/bleu thématique
+            widgets:
+              - label:
+                  text: "Voir les Prévisions Météo"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_previsions
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # Bouton Menu
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # --- Ligne 1 : Salon ---
+        - label:
+            text: "Salon :"
+            x: 20
+            y: 65
+            text_font: font_normal
+        - label:
+            id: lbl_salon_stats
+            x: 110
+            y: 60
+            text_font: font_titre
+            text: "--.-°C / --%"
+
+        # --- Ligne 2 : Verriere ---
+        - label:
+            text: "Verrière :"
+            x: 20
+            y: 100
+            text_font: font_normal
+        - label:
+            id: lbl_verriere_stats
+            x: 110
+            y: 95
+            text_font: font_titre
+            text: "--.-°C / --%"
+
+        # --- Ligne 3 : Sous-Sol ---
+        - label:
+            text: "Sous-Sol :"
+            x: 20
+            y: 135
+            text_font: font_normal
+        - label:
+            id: lbl_sous_sol_stats
+            x: 110
+            y: 130
+            text_font: font_titre
+            text: "--.-°C / --%"
+
+        # --- Ligne 4 : Garage ---
+        - label:
+            text: "Garage :"
+            x: 20
+            y: 170
+            text_font: font_normal
+        - label:
+            id: lbl_garage_stats
+            x: 110
+            y: 165
+            text_font: font_titre
+            text: "--.-°C / --%"
+
+        # --- Ligne 5 : Toronto ---
+        - label:
+            text: "Toronto :"
+            x: 20
+            y: 205
+            text_font: font_normal
+        - label:
+            id: lbl_toronto_stats
+            x: 110
+            y: 200
+            text_font: font_titre
+            text: "--.-°C / --%"
+
+    - id: page_previsions
+      bg_color: 0x101010
+      widgets:
+        # Titre de la page
+        - label:
+            text: "RÉSUMÉ DES PRÉVISIONS"
+            x: 10
+            y: 8
+            text_font: font_normal
+            text_color: 0x888888
+
+        # Bouton Menu en haut à droite
+        - button:
+            x: 240
+            y: 5
+            width: 75
+            height: 24
+            widgets:
+              - label:
+                  text: "Retour"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_climat
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # Le Cadre de style "Carte Météo"
+        - obj:
+            x: 10
+            y: 42
+            width: 300
+            height: 188
+            bg_color: 0x111622  # Bleu très sombre
+            border_width: 1
+            border_color: 0x22364F
+
+        # Le texte des prévisions
+        - label:
+            id: lbl_previsions_txt
+            text: "Récupération des données..."
+            x: 20
+            y: 52
+            width: 280  # Oblige le texte à s'arrêter avant le bord et à aller à la ligne
+            text_font: font_normal
+            text_color: 0xE0E0E0
+
+    # SOUS-PAGE : Appareils
+    - id: page_appareils
+      widgets:
+        # Bouton Retour
+        - button:
+            id: btn_retour_appareils
+            x: 5
+            y: 12
+            width: 125
+            height: 45
+            widgets:
+              - label:
+                  text: "<-- Retour"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # Lumière Entrée
+        - button:
+            id: btn_entree_avant
+            x: 5
+            y: 69
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: Lumière Entrée, text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_entree_avant
+
+        # Dels Poteau
+        - button:
+            id: btn_dels_poteau
+            x: 5
+            y: 126
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: Dels Poteau, text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_dels_poteau
+
+        # Pompe à Eau
+        - button:
+            id: btn_pompe
+            x: 5
+            y: 183
+            width: 125
+            height: 45
+            checkable: False
+            widgets:
+              - label: { text: Pompe à Eau, text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: page_conf_pompe
+        
+        # Porte de Garage
+        - button:
+            id: btn_porte_garage
+            x: 165
+            y: 12
+            width: 125
+            height: 45
+            checkable: False
+            widgets:
+              - label: { text: "Porte Garage", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: page_conf_garage
+
+        # Lumière Placard
+        - button:
+            id: btn_placard_entree
+            x: 165
+            y: 69
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: Lumière Placard, text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_placard_entree
+
+        # Prise Frigo
+        - button:
+            id: btn_palier_garage
+            x: 165
+            y: 126
+            width: 125
+            height: 45
+            checkable: False
+            widgets:
+              - label: { text: "Prise Frigo", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: page_conf_frigo
+
+        # Prise Fontaine
+        - button:
+            id: btn_prise_garage
+            x: 165
+            y: 183
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: "Prise Fontaine", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_prise_garage
+
+        # BOUTON LARGE : Exécution Panne de Courant
+        - button:
+            id: btn_auto_panne
+            x: 5
+            y: 240
+            width: 285
+            height: 55       
+            bg_color: 0x2C3E50  
+            radius: 8
+            widgets:
+              - label:
+                  text: "Éteindre Lumières\nAprès Panne"
+                  width: 260
+                  align: LV_ALIGN_CENTER
+                  text_align: LV_TEXT_ALIGN_CENTER
+                  text_font: font_normal
+                  text_color: 0xFFFFFF
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: automation.trigger
+                  data:
+                    entity_id: automation.eteindre_les_lumieres_apres_une_panne
+
+        # Prise Chambre 1 & Prise Fenêtre Garage
+        - button:
+            id: btn_prise_chambre_1
+            x: 5
+            y: 307
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: "Prise 1", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_prise_chambre_1
+
+        - button:
+            id: btn_prise_fenetre_garage
+            x: 165
+            y: 307
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: "Fenêtre Garage", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_prise_fenetre_garage
+
+        # Prise Salon & Prise Poteau Avant
+        - button:
+            id: btn_prise_salon
+            x: 5
+            y: 364
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: "Prise Salon", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_prise_salon
+
+        - button:
+            id: btn_prise_poteau_avant
+            x: 165
+            y: 364
+            width: 125
+            height: 45
+            checkable: true
+            widgets:
+              - label: { text: "Poteau Avant", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_prise_poteau_avant
+
+    # Page_confs de la sous-page Appareils
+    - id: page_conf_frigo
+      widgets:
+        - label:
+            text: ATTENTION FRIGO
+            x: 60
+            y: 30
+            text_font: font_titre
+        - label:
+            text: Éteindre le Frigo ?
+            x: 40
+            y: 90
+            text_font: font_normal
+        - button:
+            x: 30
+            y: 160
+            width: 110
+            height: 50
+            widgets:
+              - label: { text: "OK", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_palier_garage
+              - lvgl.page.show: page_appareils
+        - button:
+            x: 180
+            y: 160
+            width: 110
+            height: 50
+            widgets:
+              - label: { text: "Annuler", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: page_appareils
+
+    - id: page_conf_pompe
+      widgets:
+        - label:
+            text: ATTENTION POMPE
+            x: 60
+            y: 30
+            text_font: font_titre
+        - label:
+            text: Éteindre la Pompe ?
+            x: 40
+            y: 90
+            text_font: font_normal
+        - button:
+            x: 30
+            y: 160
+            width: 110
+            height: 50
+            widgets:
+              - label: { text: "OK", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_pompe
+              - lvgl.page.show: page_appareils
+        - button:
+            x: 180
+            y: 160
+            width: 110
+            height: 50
+            widgets:
+              - label: { text: "Annuler", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: page_appareils
+
+    - id: page_conf_garage
+      widgets:
+        - label:
+            text: ATTENTION PORTE GARAGE
+            x: 20
+            y: 30
+            text_font: font_titre
+        - label:
+            text: Actionner la Porte de Garage ?
+            x: 40
+            y: 90
+            text_font: font_normal
+        - button:
+            x: 30
+            y: 160
+            width: 110
+            height: 50
+            widgets:
+              - label: { text: "OK", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - switch.toggle: sw_porte_garage
+              - lvgl.page.show: page_appareils
+        - button:
+            x: 180
+            y: 160
+            width: 110
+            height: 50
+            widgets:
+              - label: { text: "Annuler", text_font: font_normal, align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: page_appareils
+
+    # SOUS-PAGE : Batteries
+    - id: page_batteries
+      widgets:
+        - button:
+            x: 10
+            y: 45
+            width: 35
+            height: 150
+            widgets:
+              - label:
+                  text: "<--\nR\ne\nt\no\nu\nr"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+        - label:
+            text: "Batteries"
+            x: 120
+            y: 12
+            text_font: font_titre
+
+        # --- Cuisine ---
+        - bar:
+            id: bar_bat_cuisine
+            x: 65
+            y: 45
+            width: 20
+            height: 120
+            min_value: 0
+            max_value: 100
+            value: !lambda "return id(val_bat_cuisine);"
+            bg_opa: COVER
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { text: "Cuis", x: 62, y: 172, text_font: font_normal }
+        - label: { id: lbl_pct_cuisine, text: "--%", x: 60, y: 192, text_font: font_normal }
+
+        # --- Pompe ---
+        - bar:
+            id: bar_bat_pompe
+            x: 107
+            y: 45
+            width: 20
+            height: 120
+            min_value: 0
+            max_value: 100
+            value: !lambda "return id(val_bat_pompe);"
+            bg_opa: COVER
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { text: "Pom", x: 105, y: 172, text_font: font_normal }
+        - label: { id: lbl_pct_pompe, text: "--%", x: 102, y: 192, text_font: font_normal }
+
+        # --- Placard ---
+        - bar:
+            id: bar_bat_placard
+            x: 149
+            y: 45
+            width: 20
+            height: 120
+            min_value: 0
+            max_value: 100
+            value: !lambda "return id(val_bat_placard);"
+            bg_opa: COVER
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { text: "Plac", x: 146, y: 172, text_font: font_normal }
+        - label: { id: lbl_pct_placard, text: "--%", x: 144, y: 192, text_font: font_normal }
+
+        # --- Porte ---
+        - bar:
+            id: bar_bat_porte
+            x: 191
+            y: 45
+            width: 20
+            height: 120
+            min_value: 0
+            max_value: 100
+            value: !lambda "return id(val_bat_porte);"
+            bg_opa: COVER
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { text: "Port", x: 188, y: 172, text_font: font_normal }
+        - label: { id: lbl_pct_porte, text: "--%", x: 186, y: 192, text_font: font_normal }
+
+        # --- Esc. Bas ---
+        - bar:
+            id: bar_bat_esc_bas
+            x: 233
+            y: 45
+            width: 20
+            height: 120
+            min_value: 0
+            max_value: 100
+            value: !lambda "return id(val_bat_esc_bas);"
+            bg_opa: COVER
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { text: "EscB", x: 229, y: 172, text_font: font_normal }
+        - label: { id: lbl_pct_esc_bas, text: "--%", x: 228, y: 192, text_font: font_normal }
+
+        # --- Esc. Haut ---
+        - bar:
+            id: bar_bat_esc_haut
+            x: 275
+            y: 45
+            width: 20
+            height: 120
+            min_value: 0
+            max_value: 100
+            value: !lambda "return id(val_bat_esc_haut);"
+            bg_opa: COVER
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { text: "EscH", x: 271, y: 172, text_font: font_normal }
+        - label: { id: lbl_pct_esc_haut, text: "--%", x: 270, y: 192, text_font: font_normal }
+
+    # SOUS-PAGE : Machine
+    - id: page_machine
+      widgets:
+        # Bouton Retour Vertical à gauche
+        - button:
+            x: 10
+            y: 45
+            width: 35
+            height: 150
+            widgets:
+              - label:
+                  text: "<--\nR\ne\nt\no\nu\nr"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+        - label:
+            text: "CM4-ioBoard"
+            x: 125
+            y: 12
+            text_font: font_titre
+
+        # --- CPU
+        - arc:
+            id: arc_cpu
+            x: 75
+            y: 45
+            width: 70
+            height: 70
+            min_value: 0
+            max_value: 100
+            bg_opa: TRANSP # Rend le carré de fond invisible !
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        # Valeur numérique au centre
+        - label: { id: lbl_txt_cpu, text: "--%", x: 95, y: 70, text_font: font_normal }
+        # Titre sous la jauge
+        - label: { text: "CPU", x: 98, y: 120, text_font: font_normal }
+
+        # --- RAM ---
+        - arc:
+            id: arc_ram
+            x: 195
+            y: 45
+            width: 70
+            height: 70
+            min_value: 0
+            max_value: 100
+            bg_opa: TRANSP # Rend le carré de fond invisible !
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { id: lbl_txt_ram, text: "--%", x: 215, y: 70, text_font: font_normal }
+        - label: { text: "RAM", x: 218, y: 120, text_font: font_normal }
+
+        # --- TEMPÉRATURE ---
+        - arc:
+            id: arc_temp
+            x: 75
+            y: 145
+            width: 70
+            height: 70
+            min_value: 0
+            max_value: 100 # Ajuste le max selon tes habitudes (ex: 80°C ou 100°C)
+            bg_opa: TRANSP
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { id: lbl_txt_temp, text: "--°C", x: 93, y: 170, text_font: font_normal }
+        - label: { text: "TEMP", x: 94, y: 220, text_font: font_normal }
+
+        # --- DISQUE ---
+        - arc:
+            id: arc_disque
+            x: 195
+            y: 145
+            width: 70
+            height: 70
+            min_value: 0
+            max_value: 100
+            bg_opa: TRANSP
+            indicator:
+              bg_color: 0x00D1FF
+              bg_opa: COVER
+        - label: { id: lbl_txt_disque, text: "--%", x: 215, y: 170, text_font: font_normal }
+        - label: { text: "DISC", x: 215, y: 220, text_font: font_normal }
+
+    # SOUS-PAGE : Centre Média
+    - id: page_media
+      bg_color: 0x101010
+      widgets:
+        # Bouton pour la liste de Playlists
+        - button:
+            x: 5
+            y: 5
+            width: 245
+            height: 24
+            bg_color: 0x1B8A5A  # Vert/bleu thématique
+            widgets:
+              - label:
+                  text: "Listes de Lecture ;-)"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_playlist
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # --- BARRE DE NAVIGATION HAUT ---
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_menu, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        # Ligne de séparation déco du haut
+        - obj:
+            x: 10
+            y: 35
+            width: 300
+            height: 2
+            bg_color: 0x22364F
+            border_width: 0
+
+        # --- ZONE PRINCIPALE : TEXTE ---
+        # Titre de la chanson
+        - label:
+            id: label_titre
+            text: "Immigration Man"
+            x: 10
+            y: 45
+            width: 300
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_titre
+            text_color: 0xFFFFFF
+
+        # Artiste
+        - label:
+            id: label_artiste
+            text: "Crosby & Nash"
+            x: 10
+            y: 100
+            width: 300
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_titre
+            text_color: 0x888888
+
+        # Ligne de séparation déco du bas
+        - obj:
+            x: 11
+            y: 170
+            width: 309
+            height: 2
+            bg_color: 0x22364F
+            border_width: 0
+
+        # --- CONTROLES : BOUTONS MÉDIA ---
+        # Slider Volume
+        - slider:
+            id: volume_slider
+            x: 40
+            y: 150
+            width: 240
+            height: 10
+            min_value: 0
+            max_value: 100
+            bg_color: 2242127
+            value: !lambda "return id(volume_distant);"
+            on_value:
+              then:
+                - if:
+                    condition:
+                      lambda: "return !id(blocage_initial);"
+                    then:
+                      - homeassistant.service:
+                          service: media_player.volume_set
+                          data:
+                            entity_id: media_player.salle_de_sejour_2
+                            volume_level: !lambda "return to_string(((int)x) / 100.0);"
+
+        # Bouton : SHUFFLE (Aléatoire)
+        - button:
+            x: 11
+            y: 180
+            width: 50
+            height: 40
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "Rnd"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.shuffle_set
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    shuffle: "true" # Active le mode aléatoire sur la file Music Assistant
+
+        # Bouton Précédent
+        - button:
+            x: 73
+            y: 180
+            width: 50
+            height: 40
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "|<"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.media_previous_track
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+
+        # Bouton Play/Pause
+        - button:
+            x: 135
+            y: 180
+            width: 50
+            height: 40
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "||"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.media_play_pause
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+
+        # Bouton Suivant
+        - button:
+            x: 197
+            y: 180
+            width: 50
+            height: 40
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: ">|"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.media_next_track
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+
+        # Bouton : REPEAT (Répétition)
+        - button:
+            x: 259
+            y: 180
+            width: 50
+            height: 40
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "Rép"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.repeat_set
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    repeat: "all" # Alterne ou force la répétition de toute la liste
+
+        # Ligne de séparation déco du bas
+        - obj:
+            x: 11
+            y: 230
+            width: 309
+            height: 2
+            bg_color: 0x22364F
+            border_width: 0
+
+    # SOUS-PAGE : Playlist
+    - id: page_playlist
+      bg_color: 0x101010
+      widgets:
+        # Titre de la page
+        - label:
+            text: "Listes de Lecture"
+            x: 60
+            y: 10
+            text_font: font_normal
+            text_color: 0x888888
+
+        # Bouton Menu en haut à droite
+        - button:
+            x: 240
+            y: 5
+            width: 75
+            height: 24
+            widgets:
+              - label:
+                  text: "Retour"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_media
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # Le Cadre de style
+        - obj:
+            x: 10
+            y: 42
+            width: 300
+            height: 188
+            bg_color: 0x111622  # Bleu très sombre style soft de prévisions
+            border_width: 1
+            border_color: 0x22364F
+        
+        # Bouton : Nat King Cole
+        - button:
+            x: 20
+            y: 50
+            width: 136
+            height: 36
+            bg_color: 0xC84B31  # Rouge brique / Terracotta
+            widgets:
+              - label:
+                  text: "Nat King Cole"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/10"
+                    media_content_type: playlist
+
+        # Bouton : Supermix
+        - button:
+            x: 164
+            y: 50
+            width: 136
+            height: 36
+            bg_color: 0x316B83  # Bleu acier
+            widgets:
+              - label:
+                  text: "Supermix"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/14"
+                    media_content_type: playlist
+
+        # Bouton : Franco
+        - button:
+            x: 20
+            y: 93
+            width: 136
+            height: 36
+            bg_color: 0x0D7377  # Turquoise sombre / Canard
+            widgets:
+              - label:
+                  text: "Francophone"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/22"
+                    media_content_type: playlist
+
+        # Bouton : Blues & Jazz
+        - button:
+            x: 164
+            y: 93
+            width: 136
+            height: 36
+            bg_color: 0xD9A566  # Ocre doux / Cuivré
+            widgets:
+              - label:
+                  text: "Blues & Jazz"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/27"
+                    media_content_type: playlist
+
+        # Bouton : World
+        - button:
+            x: 20
+            y: 136
+            width: 136
+            height: 36
+            bg_color: 0x1B8A5A  # Ton vert thématique d'origine
+            widgets:
+              - label:
+                  text: "World"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/19"
+                    media_content_type: playlist
+
+        # Bouton : Soft Rock
+        - button:
+            x: 164
+            y: 136
+            width: 136
+            height: 36
+            bg_color: 0x7E6375  # Vieux rose / Prune doux
+            widgets:
+              - label:
+                  text: "Soft Rock"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/28"
+                    media_content_type: playlist
+
+        # Bouton : Mynewmix
+        - button:
+            x: 20
+            y: 179
+            width: 136
+            height: 36
+            bg_color: 0x2D4263
+            widgets:
+              - label:
+                  text: "Mynewmix"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/18"
+                    media_content_type: playlist
+
+        # Bouton : Rock
+        - button:
+            x: 164
+            y: 179
+            width: 136
+            height: 36
+            bg_color: 0x9A3B5A  # Magenta sombre / Bordeaux
+            widgets:
+              - label:
+                  text: "Rock"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - homeassistant.service:
+                  service: media_player.play_media
+                  data:
+                    entity_id: media_player.salle_de_sejour_2
+                    media_content_id: "library://playlist/26"
+                    media_content_type: playlist
+
+    # SOUS-PAGE : Calendrier
+    - id: page_calendrier
+      widgets:
+        # ==================== ENTÊTE & RETOUR ====================
+        # Titre de la page
+        - label:
+            text: Agenda
+            x: 100
+            y: 10
+            text_font: font_titre
+
+        # Bouton Retour au Menu
+        - button:
+            x: 240
+            y: 10
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # --- LIGNE DE SÉPARATION ---
+        - obj:
+            x: 20
+            y: 50
+            width: 270
+            height: 6
+            bg_color: 0x333333
+
+        # ==================== LISTE DE L'AGENDA ====================
+        - label:
+            id: lbl_agenda_complet
+            text: Recherche des événements...
+            x: 15
+            y: 70
+            width: 290
+            text_font: font_titre
+            text_align: LV_TEXT_ALIGN_CENTER
+
+    # SOUS-PAGE : Horloge
+    - id: page_horloge
+      bg_color: 0x101010
+      widgets:
+        # --- BARRE DE NAVIGATION HAUT ---
+        - button:
+            x: 5
+            y: 5
+            width: 60
+            height: 24
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "Chrono"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_chrono, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        - button:
+            x: 70
+            y: 5
+            width: 60
+            height: 24
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "Timer"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_timer, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        - button:
+            x: 135
+            y: 5
+            width: 65
+            height: 24
+            bg_color: 0x22364F
+            widgets:
+              - label:
+                  text: "Réveil"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_reveil, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_menu, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        # Ligne de séparation déco (Style UPS-Hydro)
+        - obj:
+            x: 0
+            y: 35
+            width: 320
+            height: 2
+            bg_color: 0x22364F
+            border_width: 0
+
+        # --- ZONE PRINCIPALE ---
+        # Date au long au-dessus
+        - label:
+            id: lbl_horloge_date
+            text: "Chargement date..."
+            x: 0
+            y: 60
+            width: 320
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_titre
+            text_color: 0x888888
+
+        # Heure Géante au centre
+        - label:
+            id: lbl_horloge_heure
+            text: "00:00:00"
+            x: 0
+            y: 105
+            width: 320
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_geante
+            text_color: 0xFFFFFF
+
+    # SOUS-PAGE : Chrono
+    - id: page_chrono
+      bg_color: 0x101010
+      widgets:
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label: {text: "Retour", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_horloge, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        - obj: {x: 0, y: 35, width: 320, height: 2, bg_color: 0x22364F, border_width: 0}
+
+        # Cadre d'habillage
+        - obj:
+            x: 10
+            y: 48
+            width: 300
+            height: 180
+            bg_color: 0x111622
+            border_width: 1
+            border_color: 0x22364F
+
+        - label:
+            id: lbl_chrono_temps
+            text: "00:00:00"
+            x: 0
+            y: 70
+            width: 320
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_geante
+            text_color: 0xFFFFFF
+
+        # Bouton Départ / Arrêt
+        - button:
+            id: btn_chrono_toggle
+            x: 25
+            y: 165
+            width: 120
+            height: 40
+            bg_color: 0x1B8A5A  # Vert fixe style industriel
+            widgets:
+              - label:
+                  id: lbl_btn_chrono_txt
+                  text: "Départ"
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  id(chrono_running) = !id(chrono_running);
+                  
+                  if (id(chrono_running)) {
+                    // ACTION DE DÉPART : On mémorise le point de départ
+                    id(chrono_millis_depart) = millis() - id(chrono_millis_total);
+                  } else {
+                    // ACTION D'ARRÊT : On fige le calcul final exact au centième près
+                    id(chrono_millis_total) = millis() - id(chrono_millis_depart);
+                  }
+              # Met à jour le texte du bouton (Arrêt ou Départ)
+              - lvgl.label.update:
+                  id: lbl_btn_chrono_txt
+                  text: !lambda |-
+                    return std::string(id(chrono_running) ? "Arrêt" : "Départ");
+              # FORCE la mise à jour finale et ultra-précise sur l'écran au moment du STOP
+              - if:
+                  condition:
+                    lambda: 'return !id(chrono_running);'
+                  then:
+                    - lvgl.label.update:
+                        id: lbl_chrono_temps
+                        text: !lambda |-
+                          uint32_t total_centi = id(chrono_millis_total) / 10;
+                          int mins = total_centi / 6000;
+                          int secs = (total_centi % 6000) / 100;
+                          int centi = total_centi % 100;
+                          char buf[32];
+                          snprintf(buf, sizeof(buf), "%02d:%02d:%02d", mins, secs, centi);
+                          return std::string(buf);
+
+        # Bouton Effacer
+        - button:
+            x: 175
+            y: 165
+            width: 120
+            height: 40
+            bg_color: 0x555555
+            widgets:
+              - label: {text: "Effacer", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  id(chrono_running) = false;
+                  id(chrono_millis_total) = 0; // Remise à zéro des millisecondes
+              - lvgl.label.update:
+                  id: lbl_chrono_temps
+                  text: "00:00:00"
+              - lvgl.label.update:
+                  id: lbl_btn_chrono_txt
+                  text: "Départ"
+
+    # SOUS-PAGE : Timer
+    - id: page_timer
+      bg_color: 0x101010
+      widgets:
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label: {text: "Retour", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_horloge, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        - obj: {x: 0, y: 35, width: 320, height: 2, bg_color: 0x22364F, border_width: 0}
+
+        # Cadre d'habillage
+        - obj: {x: 10, y: 48, width: 300, height: 180, bg_color: 0x111622, border_width: 1, border_color: 0x22364F}
+
+        - label:
+            id: lbl_timer_temps
+            text: "05:00"
+            x: 0
+            y: 53
+            width: 320
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_geante
+            text_color: 0xFFFFFF
+
+        # Réglage -1 Min
+        - button:
+            x: 25
+            y: 135
+            width: 55
+            height: 30
+            bg_color: 0x22364F
+            widgets:
+              - label: {text: "-1 M", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if(id(timer_seconds) >= 60) id(timer_seconds) -= 60;
+              - lvgl.label.update:
+                  id: lbl_timer_temps
+                  text: !lambda |-
+                    int mins = id(timer_seconds) / 60;
+                    int secs = id(timer_seconds) % 60;
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), "%02d:%02d", mins, secs);
+                    return std::string(buf);
+
+        # Réglage +1 Min
+        - button:
+            x: 240
+            y: 135
+            width: 55
+            height: 30
+            bg_color: 0x22364F
+            widgets:
+              - label: {text: "+1 M", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  id(timer_seconds) += 60;
+              - lvgl.label.update:
+                  id: lbl_timer_temps
+                  text: !lambda |-
+                    int mins = id(timer_seconds) / 60;
+                    int secs = id(timer_seconds) % 60;
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), "%02d:%02d", mins, secs);
+                    return std::string(buf);
+
+        # Bouton Départ / Arrêt
+        - button:
+            id: btn_timer_toggle
+            x: 25
+            y: 170
+            width: 120
+            height: 40
+            bg_color: 0x1B8A5A
+            widgets:
+              - label: {id: lbl_btn_timer_txt, text: "Départ", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if (id(reveil_en_train_de_sonner)) {
+                    id(reveil_en_train_de_sonner) = false;
+                  } else {
+                    id(timer_running) = !id(timer_running);
+                  }
+              - lvgl.label.update:
+                  id: lbl_btn_timer_txt
+                  text: !lambda |-
+                    if (id(reveil_en_train_de_sonner)) return std::string("ARRÊTER");
+                    return std::string(id(timer_running) ? "Arrêt" : "Départ");
+
+        # Bouton Effacer
+        - button:
+            x: 175
+            y: 170
+            width: 120
+            height: 40
+            bg_color: 0x555555
+            widgets:
+              - label: {text: "Effacer", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  id(timer_running) = false;
+                  id(timer_seconds) = 300;
+              - lvgl.label.update:
+                  id: lbl_timer_temps
+                  text: "05:00"
+              - lvgl.label.update:
+                  id: lbl_btn_timer_txt
+                  text: "Départ"
+
+    # SOUS-PAGE : Réveil
+    - id: page_reveil
+      bg_color: 0x101010
+      widgets:
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label: {text: "Retour", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - light.turn_on:
+                  id: led_alerte
+                  red: 0%
+                  green: 0%
+                  blue: 100%
+                  flash_length: 0.5s  # Clignote plus rapidement
+              - script.execute: bip_discret
+              - lvgl.page.show: {id: page_horloge, animation: LV_SCREEN_LOAD_ANIM_NONE}
+
+        - obj: {x: 0, y: 35, width: 320, height: 2, bg_color: 0x22364F, border_width: 0}
+
+        # Cadre d'habillage
+        - obj: {x: 10, y: 48, width: 300, height: 180, bg_color: 0x111622, border_width: 1, border_color: 0x22364F}
+
+        # Affichage Heure Réveil
+        - label:
+            id: lbl_reveil_temps
+            text: "06:30"
+            x: 0
+            y: 53
+            width: 320
+            align: LV_ALIGN_TOP_MID
+            text_align: LV_TEXT_ALIGN_CENTER
+            text_font: font_geante
+            text_color: 0xFFFFFF
+
+        # Ajustement Heure moins (H-)
+        - button:
+            x: 25
+            y: 135
+            width: 50
+            height: 30
+            bg_color: 0x22364F
+            widgets:
+              - label: {text: "H-", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if(id(reveil_heure) == 0) id(reveil_heure) = 23; else id(reveil_heure)--;
+              - lvgl.label.update:
+                  id: lbl_reveil_temps
+                  text: !lambda |-
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), "%02d:%02d", id(reveil_heure), id(reveil_minute));
+                    return std::string(buf);
+
+        # Ajustement Heure plus (H+)
+        - button:
+            x: 80
+            y: 135
+            width: 50
+            height: 30
+            bg_color: 0x22364F
+            widgets:
+              - label: {text: "H+", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if(id(reveil_heure) == 23) id(reveil_heure) = 0; else id(reveil_heure)++;
+              - lvgl.label.update:
+                  id: lbl_reveil_temps
+                  text: !lambda |-
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), "%02d:%02d", id(reveil_heure), id(reveil_minute));
+                    return std::string(buf);
+
+        # Ajustement Minute moins (M-)
+        - button:
+            x: 190
+            y: 135
+            width: 50
+            height: 30
+            bg_color: 0x22364F
+            widgets:
+              - label: {text: "M-", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if(id(reveil_minute) == 0) id(reveil_minute) = 59; else id(reveil_minute)--;
+              - lvgl.label.update:
+                  id: lbl_reveil_temps
+                  text: !lambda |-
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), "%02d:%02d", id(reveil_heure), id(reveil_minute));
+                    return std::string(buf);
+
+        # Ajustement Minute plus (M+)
+        - button:
+            x: 245
+            y: 135
+            width: 50
+            height: 30
+            bg_color: 0x22364F
+            widgets:
+              - label: {text: "M+", align: LV_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if(id(reveil_minute) == 59) id(reveil_minute) = 0; else id(reveil_minute)++;
+              - lvgl.label.update:
+                  id: lbl_reveil_temps
+                  text: !lambda |-
+                    char buf[16];
+                    snprintf(buf, sizeof(buf), "%02d:%02d", id(reveil_heure), id(reveil_minute));
+                    return std::string(buf);
+
+        # Bouton d'activation Alarme ON/OFF
+        - button:
+            id: btn_reveil_toggle
+            x: 25
+            y: 175
+            width: 270
+            height: 40
+            bg_color: 0x22364F
+            widgets:
+              - label: {id: lbl_btn_reveil_txt, text: "Réveil Désactivé", text_align: LV_TEXT_ALIGN_CENTER, text_font: font_normal}
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if (id(reveil_en_train_de_sonner)) {
+                    id(reveil_en_train_de_sonner) = false;
+                  } else {
+                    id(reveil_active) = !id(reveil_active);
+                  }
+              - lvgl.label.update:
+                  id: lbl_btn_reveil_txt
+                  text: !lambda |-
+                    if (id(reveil_en_train_de_sonner)) return std::string("ARRÊTER L'ALARME");
+                    return std::string(id(reveil_active) ? "Réveil ACTIF" : "Réveil Désactivé");
+
+    # SOUS-PAGE : UPS-Hydro
+    - id: page_ups_hydro
+      bg_color: 0x101010
+      widgets:
+        # --- LIGNE DU HAUT : CONSO HIER ---
+        - label:
+            id: lbl_hydro_total_jour_val
+            text: "Conso-Hydro-Hier: -- kWh"
+            x: 15
+            y: 12
+            text_font: font_normal
+            text_color: 0x00A8FF
+
+        # --- LIGNE UPS ---
+        - label:
+            text: "UPS :"
+            x: 15
+            y: 35
+            text_font: font_normal
+        - label:
+            id: lbl_ups_etat_val
+            text: "Inconnu"
+            x: 65
+            y: 35
+            text_font: font_normal
+            text_color: 0x2ECC71
+        - label:
+            id: lbl_ups_batt_txt
+            text: "--%"
+            x: 275
+            y: 35
+            text_font: font_normal
+            
+        - bar:
+            id: bar_ups_batterie
+            x: 165
+            y: 38
+            width: 100
+            height: 10
+            bg_color: 0x222222
+            indicator:
+              bg_color: 0x2ECC71
+
+        # --- LIGNE DE SÉPARATION ---
+        - obj:
+            x: 10
+            y: 58
+            width: 300
+            height: 4
+            bg_color: 0x333333
+
+        # --- BLOC DU BAS : APPAREILS ---
+        - label:
+            text: "Appareils individuels"
+            x: 15
+            y: 66
+            text_font: font_normal
+            text_color: 0xAAAAAA
+
+        # 1. Déshumidificateur
+        - label:
+            text: "Déshumidificateur"
+            x: 15
+            y: 90
+            text_font: font_normal
+        - label:
+            id: lbl_deshum_val
+            text: "-.- kWh"
+            x: 230
+            y: 90
+            text_font: font_normal
+            text_color: 0xD4AF37
+        - bar:
+            id: bar_deshum
+            x: 15
+            y: 110
+            width: 290
+            height: 8
+            bg_color: 0x221A00
+            indicator:
+              bg_color: 0xD4AF37
+
+        # 2. Pompe à Eau
+        - label:
+            text: "Pompe à Eau"
+            x: 15
+            y: 125
+            text_font: font_normal
+        - label:
+            id: lbl_pompe_val
+            text: "-.- kWh"
+            x: 230
+            y: 125
+            text_font: font_normal
+            text_color: 0x1B8A5A
+        - bar:
+            id: bar_pompe
+            x: 15
+            y: 144
+            width: 290
+            height: 8
+            bg_color: 0x052214
+            indicator:
+              bg_color: 0x1B8A5A
+
+        # 3. Frigo Garage
+        - label:
+            text: "Frigo Garage"
+            x: 15
+            y: 160
+            text_font: font_normal
+        - label:
+            id: lbl_garage_val
+            text: "-.- kWh"
+            x: 230
+            y: 160
+            text_font: font_normal
+            text_color: 0x7B2CBF
+        - bar:
+            id: bar_garage
+            x: 15
+            y: 180
+            width: 290
+            height: 8
+            bg_color: 0x1A052E
+            indicator:
+              bg_color: 0x7B2CBF
+
+        # 4. Fontaine Étang
+        - label:
+            text: "Fontaine Étang"
+            x: 15
+            y: 195     # Était 193
+            text_font: font_normal
+        - label:
+            id: lbl_fontaine_val
+            text: "-.- kWh"
+            x: 230
+            y: 195     # Était 193
+            text_font: font_normal
+            text_color: 0x00A8FF
+        - bar:
+            id: bar_fontaine
+            x: 15
+            y: 216
+            width: 290
+            height: 8
+            bg_color: 0x001A2E
+            indicator:
+              bg_color: 0x00A8FF
+
+        # Bouton Retour au Menu
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
