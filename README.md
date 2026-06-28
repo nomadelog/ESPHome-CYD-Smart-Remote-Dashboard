@@ -21,11 +21,11 @@ Ce projet pousse ESPHome et la bibliothèque graphique **LVGL** dans leurs derni
 
 ### 🛠️ Le Hardware / Astuce DIY d'Ergonomie
 
-L'un des points forts de ce montage est son ergonomie physique. En fixant une **batterie rechargeable** plate directement dos à dos sur la partie supérieure arrière du CYD, l'appareil gagne plusieurs avantages :
-1. Un excellent lestage pour une tenue stable sur un bureau.
+L'un des points forts de ce montage est son ergonomie physique et sa polyvalence. En fixant un bloc batterie externe **INIU de format poche (5000mAh avec chargeur Apple Watch intégré)** directement dos à dos sur la partie supérieure arrière du CYD, l'appareil se transforme en véritable station de bureau :
+1. Un excellent lestage pour une tenue stable sur un bureau sans support supplémentaire.
 2. Un angle d'inclinaison parfait pour la lecture et l'utilisation du stylet.
-3. Un dégagement optimal permettant de laisser le chargeur magnétique inférieur accessible (parfait pour y déposer une montre à recharger en bonus).
-4. L'utilisation d'un connecteur USB-C en "coude" pour garder un profil compact et propre.
+3. Un dégagement optimal au bas du boîtier permettant de laisser le **chargeur magnétique de montre de la batterie INIU entièrement accessible**, transformant le tout en station de recharge bonus.
+4. L'utilisation d'un connecteur USB-C en "coude" pour relier le câble intégré proprement.
 
 | Vue de Profil | Détails du Montage Arrière |
 | :---: | :---: |
@@ -66,11 +66,11 @@ This project pushes ESPHome and the **LVGL** graphics library to their absolute 
 
 ### 🛠️ Hardware & Ergonomics DIY Hack
 
-A major highlight of this build is its physical design. By attaching a flat **rechargeable battery** back-to-back on the upper rear section of the CYD, the device gains several unique benefits:
-1. Excellent weight distribution for rock-solid stability on a desk.
+A major highlight of this build is its physical design and versatility. By attaching a **pocket-sized INIU power bank (5000mAh with a built-in Apple Watch charger)** back-to-back on the upper rear section of the CYD, the device transforms into a clever desktop docking station:
+1. Excellent weight distribution for rock-solid stability on a desk without needing an extra stand.
 2. Perfect viewing and stylus angle.
-3. Great clearance, keeping the lower magnetic charger fully accessible (bonus: perfect for charging a smartwatch underneath!).
-4. Uses a right-angle USB-C connector to maintain a clean, compact profile.
+3. Great clearance at the bottom, keeping the **INIU's integrated magnetic smartwatch charger fully accessible** for bonus charging utility.
+4. Uses a right-angle USB-C connector to route the built-in cable cleanly.
 
 ### 📸 Widgets & UI Gallery
 
