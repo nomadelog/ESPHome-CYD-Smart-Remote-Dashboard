@@ -14,7 +14,7 @@ Ce projet pousse ESPHome et la bibliothèque graphique **LVGL** dans leurs derni
 
 ### ✨ Caractéristiques principales
 
-- **Gestions Multimédia Avancée :** Intégration complète avec les lecteurs de médias de Home Assistant (idéal pour *Music Assistant*).
+- **Gestion Multimédia Avancée :** Intégration complète avec les lecteurs de médias de Home Assistant (idéal pour *Music Assistant*).
 - **Navigation Fluide :** Menu tactile à onglets permettant de basculer instantanément entre le lecteur principal et la sélection des listes de lecture personnalisées.
 - **Contrôle Précis :** Curseurs (*sliders*) de volume synchronisés en temps réel et boutons tactiles parfaitement dimensionnés pour l'écran résistif de 2.8".
 - **Optimisation du Code :** Architecture YAML conçue pour l'efficacité, évitant les surcharges de mémoire au moment de la compilation C++.
@@ -27,19 +27,22 @@ L'un des points forts de ce montage est son ergonomie physique. En fixant une **
 3. Un dégagement optimal permettant de laisser le chargeur magnétique inférieur accessible (parfait pour y déposer une montre à recharger en bonus).
 4. L'utilisation d'un connecteur USB-C en "coude" pour garder un profil compact et propre.
 
-![Montage Batterie Arrière](batterie-look%20%281%29.jpg)
-![Vue Profil Inclinaison](batterie-look%20%283%29.jpg)
+| Vue de Profil | Détails du Montage Arrière |
+| :---: | :---: |
+| ![Vue Profil Inclinaison](batterie-look%20%283%29.jpg) | ![Montage Batterie Arrière](batterie-look%20%281%29.jpg) |
 
 ### 📸 Galerie des Widgets et Interfaces
 
 Voici un aperçu des différents menus et widgets développés pour optimiser l'espace de l'écran 2.8" :
 
-| Météo & Statuts | Contrôles Domotiques | Sélection Listes |
-| :---: | :---: | :---: |
-| ![Widget 1](passe-partout%20%281%29.jpg) | ![Widget 2](passe-partout%20%282%29.jpg) | ![Widget 3](passe-partout%20%283%29.jpg) |
+| Météo & Statuts | Contrôles Domotiques | Sélection Listes | Menu Playlists |
+| :---: | :---: | :---: | :---: |
+| ![Widget 1](passe-partout%20%281%29.jpg) | ![Widget 2](passe-partout%20%282%29.jpg) | ![Widget 3](passe-partout%20%283%29.jpg) | ![Menu Playlists](batterie-look%20%285%29.jpg) |
 
-*(Et plus encore à découvrir dans l'interface complète !)*
-![Widget 4](passe-partout%20%284%29.jpg)
+*(Aperçu global de l'intégration arrière et des composants)*
+| Intégration des composants | Vue complémentaire widget |
+| :---: | :---: |
+| ![Détails arrière](batterie-look%20%287%29.jpg) | ![Widget 4](passe-partout%20%284%29.jpg) |
 
 ### 🗂️ Structure du Répertoire
 
@@ -73,12 +76,13 @@ A major highlight of this build is its physical design. By attaching a flat **re
 
 Here is a look at the various menus and widgets designed to make the most out of the 2.8" display:
 
-- **Main Player & Playlists:** See `batterie-look (4).jpg` and `batterie-look (5).jpg` in the repository files.
-- **System and Smart Home Widgets:**
-  - ![Widget 1](passe-partout%20%281%29.jpg)
-  - ![Widget 2](passe-partout%20%282%29.jpg)
-  - ![Widget 3](passe-partout%20%283%29.jpg)
-  - ![Widget 4](passe-partout%20%284%29.jpg)
+| Weather & Status | Smart Home Controls | List Selection | Playlist Menu |
+| :---: | :---: | :---: | :---: |
+| ![Widget 1](passe-partout%20%281%29.jpg) | ![Widget 2](passe-partout%20%282%29.jpg) | ![Widget 3](passe-partout%20%283%29.jpg) | ![Playlist Menu](batterie-look%20%285%29.jpg) |
+
+| Hardware Layout | Custom Widget View |
+| :---: | :---: |
+| ![Rear Details](batterie-look%20%287%29.jpg) | ![Widget 4](passe-partout%20%284%29.jpg) |
 
 ### 🚀 Quick Start
 
