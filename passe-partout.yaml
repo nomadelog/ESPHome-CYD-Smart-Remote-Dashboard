@@ -195,6 +195,10 @@ globals:
   - id: blocage_initial
     type: bool
     initial_value: 'true'
+  - id: timeout_veille
+    type: int
+    restore_value: true
+    initial_value: '120'
 
 # BANQUE DE SONS (Scripts réutilisables partout)
 script:
@@ -262,6 +266,13 @@ script:
             - light.turn_off:
                 id: led_alerte
             - delay: 0.5s
+
+  # Mise en veile de l'écran
+  - id: gestion_veille
+    mode: restart
+    then:
+      - delay: !lambda 'return id(timeout_veille) * 1000;'
+      - light.turn_off: cyd_backlight
 
 # ==============================================
 # DÉCLARATION DES POLICES DE CARACTÈRES (FONTS)
@@ -365,6 +376,16 @@ touchscreen:
       swap_xy: false
       mirror_x: true
       mirror_y: false
+    on_touch:
+      then:
+        - if:
+            condition:
+              light.is_off: cyd_backlight
+            then:
+              - light.turn_on: cyd_backlight
+              - script.execute: gestion_veille
+            else:
+              - script.execute: gestion_veille
 
 # =========================================================
 # TOUS TES CAPTEURS NUMÉRIQUES (Mélange Interne CYD et HA)
