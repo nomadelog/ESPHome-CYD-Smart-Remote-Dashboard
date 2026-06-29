@@ -56,6 +56,7 @@ output:
   - platform: ledc
     pin: GPIO17
     id: output_blue
+    inverted: true
 
 light:
   - platform: monochromatic
@@ -68,8 +69,6 @@ light:
   - platform: rgb
     name: "LED Alerte Arrière"
     id: led_alerte
-    #restore_mode: ALWAYS_OFF --> marche pas pour éteindre la DEL, mais faudrait essayer le contraire:
-    #restore_mode: ALWAYS_ON --> allume, d'une drôle de couleur!? Genre jaune-orange.
     red: output_red
     green: output_green
     blue: output_blue
