@@ -377,7 +377,7 @@ sensor:
     id: cyd_ldr
     name: "Lumière Ambiante CYD"
     update_interval: 2s # Un peu plus rapide (2s) pour capter la lampe de poche sans attendre
-    attenuation: 11db
+    attenuation: 12db
     filters:
       # 1. On lisse les lectures pour éliminer le bruit (fini le flicker !)
       - sliding_window_moving_average:
