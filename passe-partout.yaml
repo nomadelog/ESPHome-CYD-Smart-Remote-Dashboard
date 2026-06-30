@@ -10,12 +10,22 @@ esphome:
       # 1. Lance le script de gestion de la veille
       - script.execute: gestion_veille
       
-      # 2. Allume la DEL arrière en bleu (ou autres couleurs)
-      - light.turn_on:
-          id: led_alerte
-          red: 0%
-          green: 0%
-          blue: 100%
+      # Allumage selon la préférence sauvegardée :
+      - if:
+          condition:
+            lambda: 'return id(couleur_del_pref) == 1;'
+          then:
+            - light.turn_on: { id: led_alerte, red: 0%, green: 0%, blue: 100% }
+      - if:
+          condition:
+            lambda: 'return id(couleur_del_pref) == 2;'
+          then:
+            - light.turn_on: { id: led_alerte, red: 0%, green: 100%, blue: 0% }
+      - if:
+          condition:
+            lambda: 'return id(couleur_del_pref) == 3;'
+          then:
+            - light.turn_on: { id: led_alerte, red: 100%, green: 0%, blue: 0% }
 
 # Attention, puces ESP32 classique !
 esp32:
@@ -24,6 +34,7 @@ esp32:
     type: arduino
 
 logger:
+  level: INFO
 
 api:
   encryption:
@@ -35,6 +46,11 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  on_connect:
+    then:
+      - lvgl.label.update:
+          id: lbl_config_ip
+          text: !lambda 'return std::string(esphome::network::get_use_address());'
 
 # Configuration des deux bus SPI physiques du CYD
 spi:
@@ -108,6 +124,16 @@ time:
               text:
                 format: "%02d:%02d:%02d"
                 args: [ 'id(homeassistant_time).now().hour', 'id(homeassistant_time).now().minute', 'id(homeassistant_time).now().second' ]
+          #- lvgl.label.update:
+          #    id: lbl_horloge_bas
+          #    text:
+          #      format: "%02d:%02d:%02d"
+          #      args: [ 'id(homeassistant_time).now().hour', 'id(homeassistant_time).now().minute', 'id(homeassistant_time).now().second' ]
+          - lvgl.label.update:
+              id: lbl_menu_heure
+              text:
+                format: "%02d:%02d:%02d"
+                args: [ 'id(homeassistant_time).now().hour', 'id(homeassistant_time).now().minute', 'id(homeassistant_time).now().second' ]
 
   - platform: homeassistant
     id: temps_interne
@@ -120,6 +146,7 @@ time:
                   auto t = id(temps_interne).now();
                   return (id(reveil_active) && t.hour == id(reveil_heure) && t.minute == id(reveil_minute));
               then:
+                - light.turn_on: cyd_backlight
                 - lambda: |-
                     id(reveil_en_train_de_sonner) = true;
                 - script.execute: script_sonnerie_reveil
@@ -212,6 +239,10 @@ globals:
     type: int
     restore_value: true
     initial_value: '120'
+  - id: couleur_del_pref
+    type: int
+    restore_value: yes # Sauvegarde en mémoire flash !
+    initial_value: '1' # Bleu par défaut
 
 # BANQUE DE SONS (Scripts réutilisables partout)
 script:
@@ -361,6 +392,28 @@ font:
       - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
       - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
 
+image:
+  - file: "dummy.jpg"
+    id: dummy_init_image
+    type: RGB565
+    resize: 150x105
+
+  - file: "https://picsum.photos/id/10/150/105"
+    id: cam1_snap
+    type: RGB565
+
+  - file: "https://picsum.photos/id/11/150/105"
+    id: cam2_snap
+    type: RGB565
+
+  - file: "https://picsum.photos/id/12/150/105"
+    id: cam3_snap
+    type: RGB565
+
+  - file: "https://picsum.photos/id/13/150/105"
+    id: cam4_snap
+    type: RGB565
+
 # Écran branché sur son bus dédié
 display:
   - platform: ili9xxx
@@ -404,6 +457,18 @@ touchscreen:
 # TOUS TES CAPTEURS NUMÉRIQUES (Mélange Interne CYD et HA)
 # =========================================================
 sensor:
+  - platform: wifi_signal
+    id: mon_wifi_signal
+    name: "Signal Wi-Fi"
+    update_interval: 60s
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: lbl_wifi_bas
+            text:
+              format: "Wi-Fi: %.0f dBm"
+              args: [ 'x' ]
+
   # Photorésistance INTERNE (onboard) du CYD
   - platform: adc
     pin: GPIO34
@@ -483,26 +548,26 @@ sensor:
             args: [ 'id(temp_verriere).state', 'id(hum_verriere).state' ]
 
   - platform: homeassistant
-    id: temp_toronto
-    entity_id: sensor.toronto_temperature
+    id: temp_prevost
+    entity_id: sensor.prevost_temperature
     internal: true
     on_value:
       - lvgl.label.update:
-          id: lbl_toronto_stats
+          id: lbl_prevost_stats
           text:
             format: "%.1f°C / %.0f%%"
-            args: [ 'id(temp_toronto).state', 'id(hum_toronto).state' ]
+            args: [ 'id(temp_prevost).state', 'id(hum_prevost).state' ]
 
   - platform: homeassistant
-    id: hum_toronto
-    entity_id: sensor.toronto_humidite
+    id: hum_prevost
+    entity_id: sensor.prevost_humidite
     internal: true
     on_value:
       - lvgl.label.update:
-          id: lbl_toronto_stats
+          id: lbl_prevost_stats
           text:
             format: "%.1f°C / %.0f%%"
-            args: [ 'id(temp_toronto).state', 'id(hum_toronto).state' ]
+            args: [ 'id(temp_prevost).state', 'id(hum_prevost).state' ]
 
   - platform: homeassistant
     id: temp_sous_sol
@@ -653,6 +718,7 @@ sensor:
           condition:
             lambda: 'return (id(val_temp).state > 60.0 && !id(alerte_cpu_muette));'
           then:
+            - light.turn_on: cyd_backlight
             # On change le texte pour le CPU !
             - lvgl.label.update:
                 id: popup_texte
@@ -692,7 +758,7 @@ sensor:
   # Consommation Totale Maison Journalière Hier ---
   - platform: homeassistant
     id: hydro_total_jour
-    entity_id: sensor.maison_hydro_quebec_chalet_consommation_journaliere
+    entity_id: sensor.maison_hydro_quebec_entre_buttes_consommation_journaliere
     accuracy_decimals: 0
     on_value:
       then:
@@ -798,7 +864,7 @@ text_sensor:
 
   - platform: homeassistant
     id: weather_resume
-    entity_id: sensor.toronto_resume
+    entity_id: sensor.prevost_resume
     on_value:
       then:
         - lvgl.label.update:
@@ -819,6 +885,9 @@ text_sensor:
     on_value:
       - lvgl.label.update:
           id: lbl_horloge_date
+          text: !lambda "return x.c_str();"
+      - lvgl.label.update:
+          id: lbl_menu_date
           text: !lambda "return x.c_str();"
 
   # --- SOUS-PAGE : UPS-Hydro ---
@@ -975,13 +1044,13 @@ switch:
             checked: false
 
   - platform: homeassistant
-    id: sw_prise_chambre_1
-    entity_id: switch.prise_chambre_1
+    id: sw_prise_paul_andre
+    entity_id: switch.prise_paul_andre
     internal: true
     on_turn_on:
-      - lvgl.widget.update: { id: btn_prise_chambre_1, state: { checked: true } }
+      - lvgl.widget.update: { id: btn_prise_paul_andre, state: { checked: true } }
     on_turn_off:
-      - lvgl.widget.update: { id: btn_prise_chambre_1, state: { checked: false } }
+      - lvgl.widget.update: { id: btn_prise_paul_andre, state: { checked: false } }
 
   - platform: homeassistant
     id: sw_prise_fenetre_garage
@@ -1065,6 +1134,7 @@ interval:
           condition:
             lambda: 'return id(timer_seconds) == 0 && id(timer_running);'
           then:
+            - light.turn_on: cyd_backlight
             - lambda: |-
                 id(timer_running) = false;            // On arrête le moteur
                 id(reveil_en_train_de_sonner) = true; // On lève le drapeau de la sonnerie
@@ -1169,6 +1239,7 @@ lvgl:
                       blue: 100%
                   - globals.set: { id: popup_actif, value: 'false' }
                   - lambda: "id(mon_haut_parleur).stop();"
+                  - script.execute: gestion_veille
                   - lvgl.widget.hide: popup_alerte
 
       - obj:
@@ -1219,6 +1290,7 @@ lvgl:
                   - script.execute: bip_discret
                   - lambda: |-
                       id(reveil_en_train_de_sonner) = false;
+                  - script.execute: gestion_veille
                   - lvgl.widget.hide: popup_alarme
 
   pages:
@@ -1228,9 +1300,9 @@ lvgl:
         - button:
             id: btn_climat
             x: 15
-            y: 12
+            y: 10
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "Climat"
@@ -1245,9 +1317,9 @@ lvgl:
         - button:
             id: btn_appareils
             x: 15
-            y: 69
+            y: 55
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "Appareils"
@@ -1262,9 +1334,9 @@ lvgl:
         - button:
             id: btn_batteries
             x: 15
-            y: 126
+            y: 100
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "Batteries"
@@ -1284,9 +1356,9 @@ lvgl:
         - button:
             id: btn_machine
             x: 15
-            y: 183
+            y: 145
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "CM4-ioBoard"
@@ -1300,33 +1372,30 @@ lvgl:
               - lvgl.arc.update: { id: arc_temp, value: !lambda "return id(val_temp).state;" }
               - lvgl.page.show: { id: page_machine, animation: LV_SCREEN_LOAD_ANIM_NONE }
         
-        # Widget Date & Heure (Pas un bouton, un affichage passif)
-        #- label:
-        #    id: lbl_menu_heure
-        #    text: "00:00"
-        #    align: LV_ALIGN_TOP_LEFT # On repart d'un alignement standard à gauche
-        #    x: 170 # Début exact de la colonne de droite
-        #    y: 12
-        #    width: 135 # Largeur de la colonne
-        #    text_align: CENTER # C'est cette propriété qui centre le TEXTE dans sa boîte !
-        #    text_font: font_titre
-        #- label:
-        #    id: lbl_menu_date
-        #    text: "--/--"
-        #    align: LV_ALIGN_TOP_LEFT
-        #    x: 170
-        #    y: 38
-        #    width: 135
-        #    text_align: CENTER # Centre le texte horizontalement
-        #    text_font: font_normal
+        - button:
+            id: btn_diaporama
+            x: 15
+            y: 190
+            width: 135
+            height: 40
+            widgets:
+              - label:
+                  text: "Diaporama"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_diaporama
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
 
         # Bouton UPS - Hydro
         - button:
             id: btn_ups_hydro
             x: 170 # Aligne-le à la place de ton choix dans la grille
-            y: 12  # Selon la disposition de tes 4 gros boutons
+            y: 10  # Selon la disposition de tes 4 gros boutons
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "UPS - Hydro"
@@ -1342,9 +1411,9 @@ lvgl:
         - button:
             id: btn_centre_media
             x: 170
-            y: 69
+            y: 55
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "Musique JBL"
@@ -1358,9 +1427,9 @@ lvgl:
         - button:
             id: btn_calendrier
             x: 170
-            y: 126
+            y: 100
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "Calendrier"
@@ -1374,9 +1443,9 @@ lvgl:
         - button:
             id: btn_horloge
             x: 170
-            y: 183
+            y: 145
             width: 135
-            height: 45
+            height: 40
             widgets:
               - label:
                   text: "Horloge"
@@ -1385,6 +1454,25 @@ lvgl:
             on_click:
               - script.execute: bip_discret
               - lvgl.page.show: { id: page_horloge, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        - button:
+            id: btn_config
+            x: 170
+            y: 190
+            width: 135
+            height: 40
+            widgets:
+              - label:
+                  text: "Configuration"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_config
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+
 
     # SOUS-PAGE : Climat
     - id: page_climat
@@ -1477,14 +1565,14 @@ lvgl:
             text_font: font_titre
             text: "--.-°C / --%"
 
-        # --- Ligne 5 : Toronto ---
+        # --- Ligne 5 : Prevost ---
         - label:
-            text: "Toronto :"
+            text: "Prévost :"
             x: 20
             y: 205
             text_font: font_normal
         - label:
-            id: lbl_toronto_stats
+            id: lbl_prevost_stats
             x: 110
             y: 200
             text_font: font_titre
@@ -1681,19 +1769,19 @@ lvgl:
                   data:
                     entity_id: automation.eteindre_les_lumieres_apres_une_panne
 
-        # Prise Chambre 1 & Prise Fenêtre Garage
+        # Prise Paul-André & Prise Fenêtre Garage
         - button:
-            id: btn_prise_chambre_1
+            id: btn_prise_paul_andre
             x: 5
             y: 307
             width: 125
             height: 45
             checkable: true
             widgets:
-              - label: { text: "Prise 1", text_font: font_normal, align: LV_ALIGN_CENTER }
+              - label: { text: "Prise P-A", text_font: font_normal, align: LV_ALIGN_CENTER }
             on_click:
               - script.execute: bip_discret
-              - switch.toggle: sw_prise_chambre_1
+              - switch.toggle: sw_prise_paul_andre
 
         - button:
             id: btn_prise_fenetre_garage
@@ -3132,7 +3220,7 @@ lvgl:
             indicator:
               bg_color: 0x00A8FF
 
-        # Bouton Retour au Menu
+        # Bouton de retour au Menu
         - button:
             x: 255
             y: 5
@@ -3147,3 +3235,339 @@ lvgl:
               - lvgl.page.show:
                   id: page_menu
                   animation: LV_SCREEN_LOAD_ANIM_NONE
+
+    # Sous-Page Config
+    - id: page_config
+      bg_color: 0x101010
+      widgets:
+        # Bouton de retour au Menu
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        - label:
+            text: "Configuration"
+            text_font: font_titre
+            text_color: 0x00A8FF
+            x: 45
+            y: 5
+            width: 200
+        - label:
+            id: lbl_config_veille
+            x: 10
+            y: 50
+            width: 140
+            text: "Veille : 120 sec"
+            text_font: font_normal
+            text_color: 0x00A8FF
+
+        # Bouton Moins (-)
+        - button:
+            x: 160
+            y: 45
+            width: 40
+            height: 25
+            widgets:
+              - label:
+                  text: "-"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if (id(timeout_veille) > 30) {
+                    id(timeout_veille) -= 30;
+                    id(gestion_veille).execute();
+                  }
+              - lvgl.label.update:
+                  id: lbl_config_veille
+                  text:
+                    format: "Veille : %d sec"
+                    args: [ 'id(timeout_veille)' ]
+
+        # Bouton Plus (+)
+        - button:
+            x: 210
+            y: 45
+            width: 40
+            height: 25
+            widgets:
+              - label:
+                  text: "+"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lambda: |-
+                  if (id(timeout_veille) < 600) {
+                    id(timeout_veille) += 30;
+                    id(gestion_veille).execute();
+                  }
+              - lvgl.label.update:
+                  id: lbl_config_veille
+                  text:
+                    format: "Veille : %d sec"
+                    args: [ 'id(timeout_veille)' ]
+
+        # Bouton Tester Haut-Parleur
+        - button:
+            x: 10
+            y: 90
+            width: 240
+            height: 35
+            widgets:
+              - label:
+                  text: "Tester le Haut-Parleur"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - rtttl.play: "bip:d=8,o=5,b=120:c,e"
+
+        # DEL "Bleu"
+        - button:
+            x: 10
+            y: 140
+            width: 60
+            height: 30
+            bg_color: 0x0000FF
+            widgets:
+              - label: { text: "Bleu", align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - globals.set: { id: couleur_del_pref, value: '1' }
+              - light.turn_on:
+                  id: led_alerte
+                  red: 0%
+                  green: 0%
+                  blue: 100%
+
+        # DEL "Verte"
+        - button:
+            x: 80
+            y: 140
+            width: 60
+            height: 30
+            bg_color: 0x00FF00 # Vert primaire
+            # --> Beau Vert naturel: 0x1B8A5A
+            widgets:
+              - label: { text: "Vert", align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - globals.set: { id: couleur_del_pref, value: '2' }
+              - light.turn_on:
+                  id: led_alerte
+                  red: 0%
+                  green: 100%
+                  blue: 0%
+
+        # DEL "Rouge"
+        - button:
+            x: 150
+            y: 140
+            width: 60
+            height: 30
+            bg_color: 0xFF0000 # <-- Rouge primaire
+            # --> Rouge Soft: 0xE74C3C ou 0xC0392B rouge brique
+            widgets:
+              - label: { text: "Rouge", align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - globals.set: { id: couleur_del_pref, value: '3' }
+              - light.turn_on:
+                  id: led_alerte
+                  red: 100%
+                  green: 0%
+                  blue: 0%
+
+        # DEL "Éteinte"
+        - button:
+            x: 220
+            y: 140
+            width: 60
+            height: 30
+            bg_color: 0x333333
+            widgets:
+              - label: { text: "OFF", align: LV_ALIGN_CENTER }
+            on_click:
+              - script.execute: bip_discret
+              - globals.set: { id: couleur_del_pref, value: '0' }
+              - light.turn_off:
+                  id: led_alerte
+
+        # Label d'adresse IP
+        - label:
+            id: lbl_config_ip
+            x: 10
+            y: 190
+            width: 240
+            text: "IP : En attente..."
+
+        # Horloge du bas
+        #- label:
+        #    id: lbl_horloge_bas
+        #    x: 5
+        #    y: 224
+        #    width: 80
+        #    text: "00:00:00"
+
+        # Signal Wi-Fi textuel
+        - label:
+            id: lbl_wifi_bas
+            x: 10
+            y: 224
+            width: 120
+            text: "Wi-Fi: -- dBm"
+
+        # Widget Date & Heure (Pas un bouton, un affichage passif)
+        - label:
+            id: lbl_menu_heure
+            text: "00:00:00"
+            align: LV_ALIGN_TOP_LEFT # On repart d'un alignement standard à gauche
+            x: 210
+            y: 190
+            width: 100
+            text_align: CENTER # Propriété qui centre le TEXTE dans sa boîte!
+            text_font: font_titre
+        - label:
+            id: lbl_menu_date
+            text: "--/--"
+            align: LV_ALIGN_TOP_LEFT
+            x: 160
+            y: 218
+            width: 150
+            text_align: CENTER # Centre le texte horizontalement
+            text_font: font_normal
+
+    # Sous-PAGE Cadre Numérique
+    - id: page_diaporama
+      widgets:
+        - label:
+            text: "Cadre Numérique"
+            text_font: font_normal
+            text_color: 0x00A8FF
+            x: 10
+            y: 10
+            width: 200
+
+        # Bouton de retour au Menu
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
+
+        # Photo 1
+        - button:
+            id: btn_cam1
+            x: 5
+            y: 28
+            width: 150
+            height: 100
+            widgets:
+              - image:
+                  id: img_cam1
+                  src: cam1_snap
+                  width: 150
+                  height: 105
+                  align: LV_ALIGN_CENTER
+            #on_click:
+            #  - lambda: 'id(cam_selectionnee) = 1;'
+            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Tapo Galerie" }
+            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        # Photo 2
+        - button:
+            id: btn_cam2
+            x: 165
+            y: 28
+            width: 150
+            height: 100
+            widgets:
+              - image:
+                  id: img_cam2
+                  src: cam2_snap
+                  width: 150
+                  height: 105
+                  align: LV_ALIGN_CENTER
+            #on_click:
+            #  - lambda: 'id(cam_selectionnee) = 2;'
+            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Picam 4" }
+            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        # Photo 3
+        - button:
+            id: btn_cam3
+            x: 5
+            y: 132
+            width: 150
+            height: 100
+            widgets:
+              - image:
+                  id: img_cam3
+                  src: cam3_snap
+                  width: 150
+                  height: 105
+                  align: LV_ALIGN_CENTER
+            #on_click:
+            #  - lambda: 'id(cam_selectionnee) = 3;'
+            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Tapo Verrière" }
+            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+        # Photo 4
+        - button:
+            id: btn_cam4
+            x: 165
+            y: 132
+            width: 150
+            height: 100
+            widgets:
+              - image:
+                  id: img_cam4
+                  src: cam4_snap
+                  width: 150
+                  height: 105
+                  align: LV_ALIGN_CENTER
+            #on_click:
+            #  - lambda: 'id(cam_selectionnee) = 4;'
+            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Picam 5" }
+            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
+
+
+
+
+    # 2. PAGE PLEIN ÉCRAN
+    #- id: lv_page_plein_ecran
+    #  widgets:
+    #    - label:
+    #        id: lbl_titre_plein_ecran
+    #        x: 40
+    #        y: 100
+    #        width: 240
+    #        text: "Affichage Cam"
+    #    - label:
+    #        x: 40
+    #        y: 140
+    #        width: 240
+    #        text: "< Clic pour retourner"
+    #  on_click:
+    #    - lambda: 'id(cam_selectionnee) = 0;'
+    #    - lvgl.page.show: { id: lv_page_accueil, animation: LV_SCREEN_LOAD_ANIM_NONE }
