@@ -5,27 +5,27 @@ esphome:
   friendly_name: "Passe-Partout"
 
   on_boot:
-    priority: -100  # Attend que tout le système (et LVGL) soit bien initialisé
-    then:
-      # 1. Lance le script de gestion de la veille
-      - script.execute: gestion_veille
+    - priority: -100  # Attend que tout le système (et LVGL) soit bien initialisé
+      then:
+        # 1. Lance le script de gestion de la veille immédiatement
+        - script.execute: gestion_veille
       
-      # Allumage selon la préférence sauvegardée :
-      - if:
-          condition:
-            lambda: 'return id(couleur_del_pref) == 1;'
-          then:
-            - light.turn_on: { id: led_alerte, red: 0%, green: 0%, blue: 100% }
-      - if:
-          condition:
-            lambda: 'return id(couleur_del_pref) == 2;'
-          then:
-            - light.turn_on: { id: led_alerte, red: 0%, green: 100%, blue: 0% }
-      - if:
-          condition:
-            lambda: 'return id(couleur_del_pref) == 3;'
-          then:
-            - light.turn_on: { id: led_alerte, red: 100%, green: 0%, blue: 0% }
+        # Allumage selon la préférence sauvegardée :
+        - if:
+            condition:
+              lambda: 'return id(couleur_del_pref) == 1;'
+            then:
+              - light.turn_on: { id: led_alerte, red: 0%, green: 0%, blue: 100% }
+        - if:
+            condition:
+              lambda: 'return id(couleur_del_pref) == 2;'
+            then:
+              - light.turn_on: { id: led_alerte, red: 0%, green: 100%, blue: 0% }
+        - if:
+            condition:
+              lambda: 'return id(couleur_del_pref) == 3;'
+            then:
+              - light.turn_on: { id: led_alerte, red: 100%, green: 0%, blue: 0% }
 
 # Attention, puces ESP32 classique !
 esp32:
@@ -237,16 +237,27 @@ globals:
     initial_value: 'true'
   - id: timeout_veille
     type: int
-    restore_value: true
+    restore_value: no
     initial_value: '120'
   - id: couleur_del_pref
     type: int
-    restore_value: yes # Sauvegarde en mémoire flash !
+    restore_value: yes
     initial_value: '1' # Bleu par défaut
   - id: son_actif
     type: bool
     restore_value: yes
     initial_value: 'true'
+
+number:
+  - platform: template
+    name: "Sauvegarde Veille"
+    id: sauvegarde_veille
+    optimistic: yes
+    restore_value: yes
+    initial_value: 120
+    min_value: 0
+    max_value: 300
+    step: 30
 
 # BANQUE DE SONS (Scripts réutilisables partout)
 script:
@@ -1483,6 +1494,16 @@ lvgl:
                   align: LV_ALIGN_CENTER
             on_click:
               - script.execute: bip_discret
+              - lambda: |-
+                  id(timeout_veille) = id(sauvegarde_veille).state;
+              - lvgl.label.update:
+                  id: lbl_config_veille
+                  text: !lambda |-
+                    if (id(timeout_veille) == 0) {
+                      return std::string("Veille: Off");
+                    } else {
+                      return str_sprintf("Veille: %ds", id(timeout_veille));
+                    }
               - lvgl.page.show:
                   id: page_config
                   animation: LV_SCREEN_LOAD_ANIM_NONE
@@ -3284,9 +3305,9 @@ lvgl:
             x: 10
             y: 50
             width: 140
-            text: "Veille : 120 sec"
             text_font: font_normal
-            text_color: 0x00A8FF
+            text_align: LV_TEXT_ALIGN_CENTER
+            text: "Veille: --"
 
         # Bouton Moins (-)
         - button:
@@ -3306,6 +3327,9 @@ lvgl:
                   } else if (id(timeout_veille) == 30) {
                     id(timeout_veille) = 0;
                   }
+              - number.set:
+                  id: sauvegarde_veille
+                  value: !lambda 'return id(timeout_veille);'
               - lvgl.label.update:
                   id: lbl_config_veille
                   text: !lambda |-
@@ -3333,6 +3357,9 @@ lvgl:
                   } else if (id(timeout_veille) < 300) {
                     id(timeout_veille) += 30;
                   }
+              - number.set:
+                  id: sauvegarde_veille
+                  value: !lambda 'return id(timeout_veille);'
               - lvgl.label.update:
                   id: lbl_config_veille
                   text: !lambda |-
