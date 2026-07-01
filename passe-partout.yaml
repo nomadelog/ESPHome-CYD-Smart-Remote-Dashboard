@@ -243,13 +243,22 @@ globals:
     type: int
     restore_value: yes # Sauvegarde en mémoire flash !
     initial_value: '1' # Bleu par défaut
+  - id: son_actif
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
 
 # BANQUE DE SONS (Scripts réutilisables partout)
 script:
   # Bip simple discret (Changement de page)
   - id: bip_discret
-    mode: restart
+    mode: single
     then:
+      - if:
+          condition:
+            lambda: 'return !id(son_actif);'
+          then:
+            - script.stop: bip_discret
       - rtttl.play: "click:d=4,o=4,b=250:32c" # Clic Sourd et court (Octave 4, note de 32)
       # clic Pock mécanique (Octave 3, note Sol g): "click:d=4,o=3,b=250:32g"
       # Une seule note très rapide: "click:d=4,o=5,b=200:16c" 
@@ -3323,7 +3332,7 @@ lvgl:
         - button:
             x: 10
             y: 90
-            width: 240
+            width: 180
             height: 35
             widgets:
               - label:
@@ -3332,6 +3341,41 @@ lvgl:
                   align: LV_ALIGN_CENTER
             on_click:
               - rtttl.play: "bip:d=8,o=5,b=120:c,e"
+
+        # Bouton d'activation du Son (ON/OFF)
+        - button:
+            id: btn_toggle_son
+            x: 210
+            y: 90
+            width: 100
+            height: 35
+            # Le bouton s'affiche Vert ou Rouge au démarrage selon la mémoire
+            bg_color: !lambda |-
+              return id(son_actif) ? lv_color_hex(0x1B8A5A) : lv_color_hex(0xC0392B);
+            widgets:
+              - label:
+                  id: lbl_son_status
+                  text: !lambda |-
+                    return id(son_actif) ? std::string("Son: ON") : std::string("Son: OFF");
+                  align: LV_ALIGN_CENTER
+                  text_font: font_normal
+            
+            on_click:
+              # On inverse la variable globale
+              - lambda: 'id(son_actif) = !id(son_actif);'
+              
+              # On met à jour le texte et la couleur du bouton en temps réel
+              - lvgl.label.update:
+                  id: lbl_son_status
+                  text: !lambda |-
+                    return id(son_actif) ? std::string("Bips : ON") : std::string("Bips : MUET");
+              - lvgl.widget.update:
+                  id: btn_toggle_son
+                  bg_color: !lambda |-
+                    return id(son_actif) ? lv_color_hex(0x1B8A5A) : lv_color_hex(0xC0392B);
+              
+              # On ne joue le bip de confirmation QUE si on vient de réactiver le son !
+              - script.execute: bip_discret
 
         # DEL "Bleu"
         - button:
@@ -3442,7 +3486,7 @@ lvgl:
             id: lbl_menu_date
             text: "--/--"
             align: LV_ALIGN_TOP_LEFT
-            x: 160
+            x: 130
             y: 218
             width: 150
             text_align: CENTER # Centre le texte horizontalement
