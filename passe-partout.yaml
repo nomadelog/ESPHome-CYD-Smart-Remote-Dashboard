@@ -324,6 +324,12 @@ script:
   - id: gestion_veille
     mode: restart
     then:
+      - if:
+          condition:
+            lambda: 'return id(timeout_veille) == 0;'
+          then:
+            - light.turn_on: cyd_backlight # On s'assure qu'il reste allumé
+            - script.stop: gestion_veille  # On arrête le script ici !
       - delay: !lambda 'return id(timeout_veille) * 1000;'
       - light.turn_off: cyd_backlight
 
@@ -3297,13 +3303,17 @@ lvgl:
               - lambda: |-
                   if (id(timeout_veille) > 30) {
                     id(timeout_veille) -= 30;
-                    id(gestion_veille).execute();
+                  } else if (id(timeout_veille) == 30) {
+                    id(timeout_veille) = 0;
                   }
               - lvgl.label.update:
                   id: lbl_config_veille
-                  text:
-                    format: "Veille : %d sec"
-                    args: [ 'id(timeout_veille)' ]
+                  text: !lambda |-
+                    if (id(timeout_veille) == 0) {
+                      return std::string("Veille: Off");
+                    } else {
+                      return str_sprintf("Veille: %ds", id(timeout_veille));
+                    }
 
         # Bouton Plus (+)
         - button:
@@ -3318,15 +3328,19 @@ lvgl:
             on_click:
               - script.execute: bip_discret
               - lambda: |-
-                  if (id(timeout_veille) < 600) {
+                  if (id(timeout_veille) == 0) {
+                    id(timeout_veille) = 30;
+                  } else if (id(timeout_veille) < 300) {
                     id(timeout_veille) += 30;
-                    id(gestion_veille).execute();
                   }
               - lvgl.label.update:
                   id: lbl_config_veille
-                  text:
-                    format: "Veille : %d sec"
-                    args: [ 'id(timeout_veille)' ]
+                  text: !lambda |-
+                    if (id(timeout_veille) == 0) {
+                      return std::string("Veille: Off");
+                    } else {
+                      return str_sprintf("Veille: %ds", id(timeout_veille));
+                    }
 
         # Bouton Tester Haut-Parleur
         - button:
