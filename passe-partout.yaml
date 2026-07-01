@@ -3486,9 +3486,9 @@ lvgl:
             id: lbl_menu_date
             text: "--/--"
             align: LV_ALIGN_TOP_LEFT
-            x: 130
-            y: 218
-            width: 150
+            x: 140
+            y: 220
+            width: 180
             text_align: CENTER # Centre le texte horizontalement
             text_font: font_normal
 
