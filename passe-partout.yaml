@@ -124,11 +124,6 @@ time:
               text:
                 format: "%02d:%02d:%02d"
                 args: [ 'id(homeassistant_time).now().hour', 'id(homeassistant_time).now().minute', 'id(homeassistant_time).now().second' ]
-          #- lvgl.label.update:
-          #    id: lbl_horloge_bas
-          #    text:
-          #      format: "%02d:%02d:%02d"
-          #      args: [ 'id(homeassistant_time).now().hour', 'id(homeassistant_time).now().minute', 'id(homeassistant_time).now().second' ]
           - lvgl.label.update:
               id: lbl_menu_heure
               text:
@@ -3637,22 +3632,6 @@ lvgl:
             #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
 
 
-
-
-    # 2. PAGE PLEIN ÉCRAN
-    #- id: lv_page_plein_ecran
-    #  widgets:
-    #    - label:
-    #        id: lbl_titre_plein_ecran
-    #        x: 40
-    #        y: 100
-    #        width: 240
-    #        text: "Affichage Cam"
-    #    - label:
-    #        x: 40
-    #        y: 140
-    #        width: 240
-    #        text: "< Clic pour retourner"
-    #  on_click:
-    #    - lambda: 'id(cam_selectionnee) = 0;'
-    #    - lvgl.page.show: { id: lv_page_accueil, animation: LV_SCREEN_LOAD_ANIM_NONE }
+#
+#
+#
