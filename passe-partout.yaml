@@ -2970,12 +2970,6 @@ lvgl:
             widgets:
               - label: {text: "Retour", align: LV_ALIGN_CENTER, text_font: font_normal}
             on_click:
-              - light.turn_on:
-                  id: led_alerte
-                  red: 0%
-                  green: 0%
-                  blue: 100%
-                  flash_length: 0.5s  # Clignote plus rapidement
               - script.execute: bip_discret
               - lvgl.page.show: {id: page_horloge, animation: LV_SCREEN_LOAD_ANIM_NONE}
 
