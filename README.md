@@ -35,7 +35,7 @@ L'un des points forts de ce montage est son ergonomie physique et sa polyvalence
 
 Voici un aperçu des différents menus et widgets développés pour optimiser l'espace de l'écran 2.8" :
 
-| Météo & Statuts | Contrôles Domotiques | Sélection Listes | Menu Playlists |
+| Niveaux Batteries | Contrôles Domotiques | Météo & Statuts | Menu Playlists |
 | :---: | :---: | :---: | :---: |
 | ![Widget 1](passe-partout%20%281%29.jpg) | ![Widget 2](passe-partout%20%282%29.jpg) | ![Widget 3](passe-partout%20%283%29.jpg) | ![Menu Playlists](batterie-look%20%285%29.jpg) |
 
@@ -95,7 +95,7 @@ A major highlight of this build is its physical design and versatility. By attac
 
 Here is a look at the various menus and widgets designed to make the most out of the 2.8" display:
 
-| Weather & Status | Smart Home Controls | List Selection | Playlist Menu |
+| Batteries Status | Smart Home Controls | Weather & Status | Playlist Menu |
 | :---: | :---: | :---: | :---: |
 | ![Widget 1](passe-partout%20%281%29.jpg) | ![Widget 2](passe-partout%20%282%29.jpg) | ![Widget 3](passe-partout%20%283%29.jpg) | ![Playlist Menu](batterie-look%20%285%29.jpg) |
 
