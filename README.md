@@ -17,14 +17,14 @@ Ce projet pousse ESPHome et la bibliothèque graphique **LVGL** dans leurs derni
 - **Gestion Multimédia Avancée :** Intégration complète avec les lecteurs de médias de Home Assistant (idéal pour *Music Assistant*).
 - **Navigation Fluide :** Menu tactile à onglets permettant de basculer instantanément entre le lecteur principal et la sélection des listes de lecture personnalisées.
 - **Contrôle Précis :** Curseurs (*sliders*) de volume synchronisés en temps réel et boutons tactiles parfaitement dimensionnés pour l'écran résistif de 2.8".
-- **Optimisation du Code :** Architecture YAML conçue pour l'efficacité, évitant les surcharges de mémoire au moment de la compilation C++.
+- **Optimisation du Code :** Architecture YAML conçue pour l'efficacité, évitant les surcharges de mémoire au moment de la compilation C++ en ligne de commande.
 
 ### 🛠️ Le Hardware / Astuce DIY d'Ergonomie
 
 L'un des points forts de ce montage est son ergonomie physique et sa polyvalence. En fixant un bloc batterie externe **INIU de format poche (5000mAh avec chargeur Apple Watch intégré)** directement dos à dos sur la partie supérieure arrière du CYD, l'appareil se transforme en véritable station de bureau :
 1. Un excellent lestage pour une tenue stable sur un bureau sans support supplémentaire.
 2. Un angle d'inclinaison parfait pour la lecture et l'utilisation du stylet.
-3. Un dégagement optimal au bas du boîtier permettant de laisser le **chargeur magnétique de montre de la batterie INIU entièrement accessible**, transformant le tout en station de recharge bonus.
+3. Un d'égagement optimal au bas du boîtier permettant de laisser le **chargeur magnétique de montre de la batterie INIU entièrement accessible**, transformant le tout en station de recharge bonus.
 4. L'utilisation d'un connecteur USB-C en "coude" pour relier le câble intégré proprement.
 
 | Vue de Profil | Détails du Montage Arrière |
@@ -44,9 +44,28 @@ Voici un aperçu des différents menus et widgets développés pour optimiser l'
 | :---: | :---: |
 | ![Détails arrière](batterie-look%20%287%29.jpg) | ![Widget 4](passe-partout%20%284%29.jpg) |
 
+### 🖼️ Nouveaux Menus, Cadre Photo & Solution Wi-Fi
+
+L'interface s'est récemment enrichie d'une matrice d'onglets réorganisée pour accueillir de nouvelles fonctionnalités majeures, incluant un panneau de gestion système et un mode cadre numérique interactif.
+
+| Menu Principal (Matrice) | Mode Diaporama (En construction) | Page de Configuration Terminée |
+| :---: | :---: | :---: |
+| ![Menu Principal Actuel](config-diapo%20%281%29.jpg) | ![Mode Cadre Numérique](config-diapo%20%282%29.jpg) | ![Page de Configuration](config-diapo%20%283%29.jpg) |
+
+#### ⚙️ Page « Configuration » (Complétée)
+Ce panneau technique permet un contrôle complet du comportement de l'appareil en local :
+- **Gestion de la veille :** Réglage dynamique du délai d'extinction de l'écran (avec affichage du statut actif/inactif et boutons `+` / `-`).
+- **Bouton de Redémarrage (Solution Wi-Fi Zombie) :** Les microcontrôleurs gèrent difficilement le *roaming* automatique (itinérance) entre des routeurs d'architectures différentes (comme une borne principale Bell Giga Hub et un routeur secondaire TP-Link Archer). L'ESP32 pouvant rester accroché à un signal fantôme ou être rejeté par le protocole agressif de routage, l'intégration d'un bouton matériel `Redémarrage` (via la plateforme native `restart` d'ESPHome) offre un contournement logiciel parfait. Un simple clic relance l'appareil en moins de 2 secondes pour qu'il s'associe instantanément à la borne la plus proche, évitant ainsi d'avoir à manipuler physiquement les câbles d'alimentation.
+- **Rétroaction audio :** Bouton de test du haut-parleur interne et indicateur d'état des bips système (`ACTIF` / `MUET`).
+- **Contrôle de la LED RVB arrière :** Boutons d'activation directe des couleurs (`Bleu`, `Vert`, `Rouge`) ou extinction complète (`OFF`).
+- **Diagnostics Réseau en Temps Réel :** Affichage en direct du nom d'hôte local (`.local`), de l'heure système précise et de la force réelle du signal Wi-Fi mesurée en `dBm`.
+
+#### 🖼️ Projet « Diaporama » (En développement)
+L'onglet **Diaporama** pose les bases d'un mode cadre photo numérique. Ce module est conçu pour afficher des grilles d'images et des photos de paysages récupérées de manière automatisée. Le déploiement à venir prévoit l'utilisation d'un script Python externe chargé de traiter, redimensionner en lot et sérialiser les images locales afin qu'elles soient parfaitement adaptées à la mémoire et à la résolution native de l'écran du CYD.
+
 ### 🗂️ Structure du Répertoire
 
-- `cyd-smart-dashboard.yaml` : Le fichier de configuration principal ESPHome (3100+ lignes).
+- `cyd-smart-dashboard.yaml` : Le fichier de configuration principal ESPHome (3600+ lignes).
 - `secrets.yaml` *(Non inclus)* : À créer chez vous pour vos accès Wi-Fi et clés d'API.
 
 ---
@@ -55,7 +74,7 @@ Voici un aperçu des différents menus et widgets développés pour optimiser l'
 
 Welcome to this ultra-optimized smart home control panel project for the **CYD (Cheap Yellow Display)**, model **ESP32-2432S028R** (revised version featuring 2 USB ports: Micro-USB and USB-C).
 
-This project pushes ESPHome and the **LVGL** graphics library to their absolute limits with a robust configuration of **over 3,100 lines of code**, fully cleaned, compressed, and free of unnecessary lines to ensure stable compilation on the ESP32.
+This project pushes ESPHome and the **LVGL** graphics library to their absolute limits with a robust configuration of **over 3,600 lines of code**, fully cleaned, compressed, and free of unnecessary lines to ensure stable compilation and flashing via command line (PowerShell).
 
 ### ✨ Key Features
 
@@ -84,12 +103,31 @@ Here is a look at the various menus and widgets designed to make the most out of
 | :---: | :---: |
 | ![Rear Details](batterie-look%20%287%29.jpg) | ![Widget 4](passe-partout%20%284%29.jpg) |
 
+### 🖼️ New Menus, Photo Frame & Wi-Fi Workaround
+
+The main interface has been upgraded with a new grid-based tab layout to accommodate advanced system monitoring controls and an upcoming interactive media frame.
+
+| Main Matrix Menu | Slideshow Mode (WIP) | Completed Settings Page |
+| :---: | :---: | :---: |
+| ![Main Menu Matrix](config-diapo%20%281%29.jpg) | ![Digital Photo Frame](config-diapo%20%282%29.jpg) | ![Configuration Page](config-diapo%20%283%29.jpg) |
+
+#### ⚙️ "Configuration" Page (Completed)
+This newly deployed technical panel gives full local control over hardware behavior:
+- **Display Timeout Handling:** Dynamically adjust the screen sleep timeout delay using dedicated `+` and `-` buttons (complete with On/Off status visualization).
+- **Reboot Button (Wi-Fi Zombie Fix):** Microcontrollers often struggle with seamless *roaming* between distinct router brands (e.g., a primary ISP Bell Giga Hub and a secondary TP-Link Archer access point). The ESP32 can get trapped in "zombie connection" loops or rejected by aggressive band-steering protocols. Integrating a software `Redémarrage` (Reboot) button via ESPHome's native `restart` platform offers an elegant solution. A single tap safely reboots the CYD in less than 2 seconds, forcing it to immediately hook into the nearest available router without needing to manually unplug power cords.
+- **Audio Diagnostics:** Instant internal speaker testing trigger and system buzzer state modifier (`ACTIVE` / `MUTED`).
+- **Rear RGB LED Controller:** Directly override and trigger custom back-lighting colors (`Blue`, `Green`, `Red`) or turn it completely `OFF`.
+- **Live Infrastructure Telemetry:** Monitors and prints local mDNS hostname (`.local`), precise system clock sync, and real-time Wi-Fi signal strength values measured in `dBm`.
+
+#### 🖼️ "Diaporama" Slideshow Project (Work in Progress)
+The **Diaporama** tab serves as the interface foundation for a custom digital picture frame. The feature is being built to showcase automated photo grids and landscapes. Future updates will introduce an automated external Python script optimized to process, batch-resize, and serialize local image folders so they match the hardware limitations and native layout resolution of the CYD display.
+
 ### 🚀 Quick Start
 
 1. Create a dedicated folder for this project in your ESPHome directory.
 2. Drop the provided `.yaml` configuration file into it, adjusting it to match your Home Assistant entity names.
 3. Create your own `secrets.yaml` file with your Wi-Fi credentials and API keys.
-4. Flash your CYD and enjoy!
+4. Flash your CYD using your PowerShell terminal environment (`esphome run your_file.yaml`) and enjoy!
 
 ---
 *Developed with passion by a smart home enthusiast for the open-source community.*
