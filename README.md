@@ -65,7 +65,7 @@ L'onglet **Diaporama** pose les bases d'un mode cadre photo numérique. Ce modul
 
 ### 🗂️ Structure du Répertoire
 
-- `cyd-smart-dashboard.yaml` : Le fichier de configuration principal ESPHome (3600+ lignes).
+- `passe-partout.yaml` : Le fichier de configuration principal ESPHome (3600+ lignes).
 - `secrets.yaml` *(Non inclus)* : À créer chez vous pour vos accès Wi-Fi et clés d'API.
 
 ---
@@ -125,7 +125,7 @@ The **Diaporama** tab serves as the interface foundation for a custom digital pi
 ### 🚀 Quick Start
 
 1. Create a dedicated folder for this project in your ESPHome directory.
-2. Drop the provided `.yaml` configuration file into it, adjusting it to match your Home Assistant entity names.
+2. Drop the provided `passe-partout.yaml` configuration file into it, adjusting it to match your Home Assistant entity names.
 3. Create your own `secrets.yaml` file with your Wi-Fi credentials and API keys.
 4. Flash your CYD using your PowerShell terminal environment (`esphome run your_file.yaml`) and enjoy!
 
