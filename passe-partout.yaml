@@ -44,6 +44,7 @@ ota:
   - platform: esphome
 
 wifi:
+  fast_connect: yes
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   on_connect:
@@ -473,6 +474,11 @@ touchscreen:
               - script.execute: gestion_veille
             else:
               - script.execute: gestion_veille
+
+button:
+  - platform: restart
+    name: "Redémarrer le Passe-Partout"
+    id: reboot_du_cyd
 
 # =========================================================
 # TOUS TES CAPTEURS NUMÉRIQUES (Mélange Interne CYD et HA)
@@ -3293,14 +3299,14 @@ lvgl:
             id: lbl_config_veille
             x: 10
             y: 50
-            width: 140
+            width: 80
             text_font: font_normal
             text_align: LV_TEXT_ALIGN_CENTER
             text: "Veille: --"
 
         # Bouton Moins (-)
         - button:
-            x: 160
+            x: 100
             y: 45
             width: 40
             height: 25
@@ -3330,7 +3336,7 @@ lvgl:
 
         # Bouton Plus (+)
         - button:
-            x: 210
+            x: 150
             y: 45
             width: 40
             height: 25
@@ -3357,6 +3363,21 @@ lvgl:
                     } else {
                       return str_sprintf("Veille: %ds", id(timeout_veille));
                     }
+
+        # Bouton Reboot
+        - button:
+            x: 200
+            y: 45
+            width: 110
+            height: 25
+            widgets:
+              - label:
+                  text: "Redémarrage"
+                  text_font: font_normal
+                  align: LV_ALIGN_CENTER
+            on_click:
+              - script.execute: bip_discret
+              - button.press: reboot_du_cyd
 
         # Bouton Tester Haut-Parleur
         - button:
