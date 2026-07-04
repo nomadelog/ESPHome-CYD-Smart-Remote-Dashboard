@@ -4,7 +4,7 @@
 
 ---
 
-## 🇫🇷 Version Française
+## <img src="https://upload.wikimedia.org/wikipedia/commons/5/5f/Flag_of_Quebec.svg" width="24" height="16"> Version Française
 
 Bienvenue dans ce projet de panneau de contrôle domotique ultra-optimisé pour le **CYD (Cheap Yellow Display)**, modèle **ESP32-2432S028R** (version révisée avec 2 ports USB : Micro-USB et USB-C). 
 
