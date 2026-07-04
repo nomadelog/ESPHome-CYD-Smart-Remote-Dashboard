@@ -4,7 +4,7 @@
 
 ---
 
-## <img src="https://upload.wikimedia.org/wikipedia/commons/5/5f/Flag_of_Quebec.svg" width="24" height="16"> Version Française
+## <img src="https://upload.wikimedia.org/wikipedia/commons/5/5f/Flag_of_Quebec.svg" width="24" height="16"> Version Francophone
 
 Bienvenue dans ce projet de panneau de contrôle domotique ultra-optimisé pour le **CYD (Cheap Yellow Display)**, modèle **ESP32-2432S028R** (version révisée avec 2 ports USB : Micro-USB et USB-C). 
 
@@ -70,7 +70,7 @@ L'onglet **Diaporama** pose les bases d'un mode cadre photo numérique. Ce modul
 
 ---
 
-## 🇺🇸 English Version
+## <img src="https://upload.wikimedia.org/wikipedia/commons/d/d9/Flag_of_Canada.svg" width="24" height="12"> English Version
 
 Welcome to this ultra-optimized smart home control panel project for the **CYD (Cheap Yellow Display)**, model **ESP32-2432S028R** (revised version featuring 2 USB ports: Micro-USB and USB-C).
 
