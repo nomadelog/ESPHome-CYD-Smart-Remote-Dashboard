@@ -70,7 +70,7 @@ L'onglet **Diaporama** pose les bases d'un mode cadre photo numérique. Ce modul
 
 ---
 
-## <img src="https://upload.wikimedia.org/wikipedia/commons/d/d9/Flag_of_Canada.svg" width="24" height="12"> English Version
+## 🇨🇦 English Version
 
 Welcome to this ultra-optimized smart home control panel project for the **CYD (Cheap Yellow Display)**, model **ESP32-2432S028R** (revised version featuring 2 USB ports: Micro-USB and USB-C).
 
