@@ -53,6 +53,11 @@ wifi:
           id: lbl_config_ip
           text: !lambda 'return std::string(esphome::network::get_use_address());'
 
+spi_device:
+  - id: sd_card_device
+    spi_id: spi_display
+    cs_pin: GPIO05
+
 # Configuration des deux bus SPI physiques du CYD
 spi:
   - id: spi_display
@@ -243,6 +248,13 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'true'
+  - id: photo_actuelle
+    type: int
+    restore_value: no
+    initial_value: '1'
+  - id: total_photos
+    type: int
+    initial_value: '414'
 
 number:
   - platform: template
@@ -340,6 +352,9 @@ script:
       - delay: !lambda 'return id(timeout_veille) * 1000;'
       - light.turn_off: cyd_backlight
 
+  # Boucle Diaporama
+
+
 # ==============================================
 # DÉCLARATION DES POLICES DE CARACTÈRES (FONTS)
 # ==============================================
@@ -415,25 +430,8 @@ font:
       - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
 
 image:
-  - file: "dummy.jpg"
-    id: dummy_init_image
-    type: RGB565
-    resize: 150x105
-
-  - file: "https://picsum.photos/id/10/150/105"
-    id: cam1_snap
-    type: RGB565
-
-  - file: "https://picsum.photos/id/11/150/105"
-    id: cam2_snap
-    type: RGB565
-
-  - file: "https://picsum.photos/id/12/150/105"
-    id: cam3_snap
-    type: RGB565
-
-  - file: "https://picsum.photos/id/13/150/105"
-    id: cam4_snap
+  - file: "sd/images/diapo_001.jpg" # Image tampon de départ
+    id: image_diaporama
     type: RGB565
 
 # Écran branché sur son bus dédié
@@ -1415,6 +1413,7 @@ lvgl:
               - lvgl.page.show:
                   id: page_diaporama
                   animation: LV_SCREEN_LOAD_ANIM_NONE
+              #- script.execute: boucle_diaporama
 
         # Bouton UPS - Hydro
         - button:
@@ -3546,15 +3545,27 @@ lvgl:
     # Sous-PAGE Cadre Numérique
     - id: page_diaporama
       widgets:
-        - label:
-            text: "Cadre Numérique"
-            text_font: font_normal
-            text_color: 0x00A8FF
-            x: 10
-            y: 10
-            width: 200
+        # Grand affichage de l'image du diaporama (Plein écran)
+        - image:
+            id: photo_diapo_display
+            src: image_diaporama  # L'image tampon déclarée sur la carte SD
+            width: 320
+            height: 240
+            x: 0
+            y: 0
 
-        # Bouton de retour au Menu
+        # Zone de texte transparente pour la description (Gros noms de fichiers)
+        - label:
+            id: label_description_diapo
+            text: "Initialisation du diaporama..."
+            text_font: font_normal
+            text_color: 0xFFFFFF  # Écrit en blanc pour bien découper sur le fond noir
+            x: 10
+            y: 200                # Placé au bas de l'écran
+            width: 300
+            long_mode: WRAP       # Permet de couper proprement sur 2 lignes si le nom est long !
+
+        # Bouton de retour au Menu (Superposé discrètement en haut à droite)
         - button:
             x: 255
             y: 5
@@ -3566,85 +3577,10 @@ lvgl:
                   align: LV_ALIGN_CENTER
             on_click:
               - script.execute: bip_discret
+              - script.stop: boucle_diaporama  # Arrête proprement le défilement de 30s !
               - lvgl.page.show:
                   id: page_menu
                   animation: LV_SCREEN_LOAD_ANIM_NONE
-
-        # Photo 1
-        - button:
-            id: btn_cam1
-            x: 5
-            y: 28
-            width: 150
-            height: 100
-            widgets:
-              - image:
-                  id: img_cam1
-                  src: cam1_snap
-                  width: 150
-                  height: 105
-                  align: LV_ALIGN_CENTER
-            #on_click:
-            #  - lambda: 'id(cam_selectionnee) = 1;'
-            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Tapo Galerie" }
-            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
-
-        # Photo 2
-        - button:
-            id: btn_cam2
-            x: 165
-            y: 28
-            width: 150
-            height: 100
-            widgets:
-              - image:
-                  id: img_cam2
-                  src: cam2_snap
-                  width: 150
-                  height: 105
-                  align: LV_ALIGN_CENTER
-            #on_click:
-            #  - lambda: 'id(cam_selectionnee) = 2;'
-            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Picam 4" }
-            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
-
-        # Photo 3
-        - button:
-            id: btn_cam3
-            x: 5
-            y: 132
-            width: 150
-            height: 100
-            widgets:
-              - image:
-                  id: img_cam3
-                  src: cam3_snap
-                  width: 150
-                  height: 105
-                  align: LV_ALIGN_CENTER
-            #on_click:
-            #  - lambda: 'id(cam_selectionnee) = 3;'
-            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Tapo Verrière" }
-            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
-
-        # Photo 4
-        - button:
-            id: btn_cam4
-            x: 165
-            y: 132
-            width: 150
-            height: 100
-            widgets:
-              - image:
-                  id: img_cam4
-                  src: cam4_snap
-                  width: 150
-                  height: 105
-                  align: LV_ALIGN_CENTER
-            #on_click:
-            #  - lambda: 'id(cam_selectionnee) = 4;'
-            #  - lvgl.label.update: { id: lbl_titre_plein_ecran, text: "Picam 5" }
-            #  - lvgl.page.show: { id: lv_page_plein_ecran, animation: LV_SCREEN_LOAD_ANIM_NONE }
 
 
 #
