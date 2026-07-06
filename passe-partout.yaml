@@ -53,12 +53,7 @@ wifi:
           id: lbl_config_ip
           text: !lambda 'return std::string(esphome::network::get_use_address());'
 
-spi_device:
-  - id: sd_card_device
-    spi_id: spi_display
-    cs_pin: GPIO05
-
-# Configuration des deux bus SPI physiques du CYD
+# Configuration des bus SPI physiques du CYD
 spi:
   - id: spi_display
     clk_pin: GPIO14
@@ -68,6 +63,17 @@ spi:
     clk_pin: GPIO25
     mosi_pin: GPIO32
     miso_pin: GPIO39
+  # Carte Micro-SD
+  - id: bus_a
+    clk_pin: GPIO18
+    miso_pin: GPIO19
+    mosi_pin: GPIO23
+
+# Carte Micro-SD
+spi_device:
+  - id: sd_card_device
+    spi_id: bus_a
+    cs_pin: GPIO05
 
 # Gestion du rétroéclairage de l'écran (Dimming)
 output:
@@ -158,9 +164,7 @@ time:
                     green: 0%
                     blue: 100%
 
-# ======================================================
-# MÉMOIRE DE NAVIGATION (Savoir sur quelle page on est)
-# ======================================================
+# Variables et Constantes
 globals:
   - id: page_active
     type: int
@@ -236,10 +240,6 @@ globals:
   - id: blocage_initial
     type: bool
     initial_value: 'true'
-  - id: timeout_veille
-    type: int
-    restore_value: no
-    initial_value: '120'
   - id: couleur_del_pref
     type: int
     restore_value: yes
@@ -345,11 +345,14 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return id(timeout_veille) == 0;'
+            # On lit DIRECTEMENT le composant number (.state) au lieu de la globale
+            lambda: 'return id(sauvegarde_veille).state == 0;'
           then:
             - light.turn_on: cyd_backlight # On s'assure qu'il reste allumé
             - script.stop: gestion_veille  # On arrête le script ici !
-      - delay: !lambda 'return id(timeout_veille) * 1000;'
+      
+      # Si on n'est pas à 0, on applique le délai choisi dans le menu (+ ou -)
+      - delay: !lambda 'return id(sauvegarde_veille).state * 1000;'
       - light.turn_off: cyd_backlight
 
   # Boucle Diaporama
@@ -1104,9 +1107,7 @@ switch:
     on_turn_off:
       - lvgl.widget.update: { id: btn_prise_poteau_avant, state: { checked: false } }
 
-# =====================================================================
-# BLOC DE RAFRAÎCHISSEMENT AUTOMATIQUE (À AJOUTER)
-# =====================================================================
+# Contrôle du Temps
 interval:
   - interval: 1s
     then:
@@ -1409,6 +1410,7 @@ lvgl:
                   text_font: font_normal
                   align: LV_ALIGN_CENTER
             on_click:
+              - script.stop: gestion_veille
               - script.execute: bip_discret
               - lvgl.page.show:
                   id: page_diaporama
@@ -3316,21 +3318,22 @@ lvgl:
             on_click:
               - script.execute: bip_discret
               - lambda: |-
-                  if (id(timeout_veille) > 30) {
-                    id(timeout_veille) -= 30;
-                  } else if (id(timeout_veille) == 30) {
-                    id(timeout_veille) = 0;
+                  int val = (int)id(sauvegarde_veille).state;
+                  if (val > 30) {
+                    val -= 30;
+                  } else if (val == 30) {
+                    val = 0;
                   }
-              - number.set:
-                  id: sauvegarde_veille
-                  value: !lambda 'return id(timeout_veille);'
+                  // LA BONNE SYNTAXE C++ : On crée un appel, on applique la valeur, et on exécute.
+                  id(sauvegarde_veille).make_call().set_value(val).perform();
               - lvgl.label.update:
                   id: lbl_config_veille
                   text: !lambda |-
-                    if (id(timeout_veille) == 0) {
+                    int val = (int)id(sauvegarde_veille).state;
+                    if (val == 0) {
                       return std::string("Veille: Off");
                     } else {
-                      return str_sprintf("Veille: %ds", id(timeout_veille));
+                      return str_sprintf("Veille: %ds", val);
                     }
 
         # Bouton Plus (+)
@@ -3346,21 +3349,22 @@ lvgl:
             on_click:
               - script.execute: bip_discret
               - lambda: |-
-                  if (id(timeout_veille) == 0) {
-                    id(timeout_veille) = 30;
-                  } else if (id(timeout_veille) < 300) {
-                    id(timeout_veille) += 30;
+                  int val = (int)id(sauvegarde_veille).state;
+                  if (val == 0) {
+                    val = 30;
+                  } else if (val < 300) {
+                    val += 30;
                   }
-              - number.set:
-                  id: sauvegarde_veille
-                  value: !lambda 'return id(timeout_veille);'
+                  // LA BONNE SYNTAXE C++ : On crée un appel, on applique la valeur, et on exécute.
+                  id(sauvegarde_veille).make_call().set_value(val).perform();
               - lvgl.label.update:
                   id: lbl_config_veille
                   text: !lambda |-
-                    if (id(timeout_veille) == 0) {
+                    int val = (int)id(sauvegarde_veille).state;
+                    if (val == 0) {
                       return std::string("Veille: Off");
                     } else {
-                      return str_sprintf("Veille: %ds", id(timeout_veille));
+                      return str_sprintf("Veille: %ds", val);
                     }
 
         # Bouton Reboot
@@ -3506,14 +3510,6 @@ lvgl:
             width: 240
             text: "IP : En attente..."
 
-        # Horloge du bas
-        #- label:
-        #    id: lbl_horloge_bas
-        #    x: 5
-        #    y: 224
-        #    width: 80
-        #    text: "00:00:00"
-
         # Signal Wi-Fi textuel
         - label:
             id: lbl_wifi_bas
@@ -3545,39 +3541,32 @@ lvgl:
     # Sous-PAGE Cadre Numérique
     - id: page_diaporama
       widgets:
-        # Grand affichage de l'image du diaporama (Plein écran)
         - image:
             id: photo_diapo_display
-            src: image_diaporama  # L'image tampon déclarée sur la carte SD
+            src: image_diaporama
             width: 320
             height: 240
             x: 0
             y: 0
+            on_click:
+              - script.execute: bip_discret
+              - script.stop: boucle_diaporama
+              - lvgl.page.show:
+                  id: page_menu
+                  animation: LV_SCREEN_LOAD_ANIM_NONE
 
-        # Zone de texte transparente pour la description (Gros noms de fichiers)
         - label:
             id: label_description_diapo
             text: "Initialisation du diaporama..."
             text_font: font_normal
-            text_color: 0xFFFFFF  # Écrit en blanc pour bien découper sur le fond noir
+            text_color: 0xFFFFFF
             x: 10
-            y: 200                # Placé au bas de l'écran
+            y: 200
             width: 300
-            long_mode: WRAP       # Permet de couper proprement sur 2 lignes si le nom est long !
-
-        # Bouton de retour au Menu (Superposé discrètement en haut à droite)
-        - button:
-            x: 255
-            y: 5
-            width: 60
-            height: 24
-            widgets:
-              - label:
-                  text: "Menu"
-                  align: LV_ALIGN_CENTER
+            long_mode: WRAP
             on_click:
               - script.execute: bip_discret
-              - script.stop: boucle_diaporama  # Arrête proprement le défilement de 30s !
+              - script.stop: boucle_diaporama
               - lvgl.page.show:
                   id: page_menu
                   animation: LV_SCREEN_LOAD_ANIM_NONE
