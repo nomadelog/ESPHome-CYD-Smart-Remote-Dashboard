@@ -32,6 +32,9 @@ esp32:
   board: esp32dev
   framework:
     type: arduino
+    advanced:
+      minimum_chip_revision: "3.1"
+      sram1_as_iram: true
 
 logger:
   level: INFO
@@ -63,17 +66,6 @@ spi:
     clk_pin: GPIO25
     mosi_pin: GPIO32
     miso_pin: GPIO39
-  # Carte Micro-SD
-  - id: bus_a
-    clk_pin: GPIO18
-    miso_pin: GPIO19
-    mosi_pin: GPIO23
-
-# Carte Micro-SD
-spi_device:
-  - id: sd_card_device
-    spi_id: bus_a
-    cs_pin: GPIO05
 
 # Gestion du rétroéclairage de l'écran (Dimming)
 output:
@@ -248,13 +240,6 @@ globals:
     type: bool
     restore_value: yes
     initial_value: 'true'
-  - id: photo_actuelle
-    type: int
-    restore_value: no
-    initial_value: '1'
-  - id: total_photos
-    type: int
-    initial_value: '414'
 
 number:
   - platform: template
@@ -354,9 +339,6 @@ script:
       # Si on n'est pas à 0, on applique le délai choisi dans le menu (+ ou -)
       - delay: !lambda 'return id(sauvegarde_veille).state * 1000;'
       - light.turn_off: cyd_backlight
-
-  # Boucle Diaporama
-
 
 # ==============================================
 # DÉCLARATION DES POLICES DE CARACTÈRES (FONTS)
@@ -964,6 +946,17 @@ text_sensor:
               }
               return s;
 
+  - platform: homeassistant
+    id: ha_journal_texte
+    entity_id: sensor.dernieres_activites_cyd
+    attribute: journal
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: journal_label_id
+            text: !lambda |-
+              return x.c_str();
+
 switch:
   # --- SOUS-PAGE : LUMIÈRES & PRISES ---
   - platform: homeassistant
@@ -1399,23 +1392,21 @@ lvgl:
               - lvgl.page.show: { id: page_machine, animation: LV_SCREEN_LOAD_ANIM_NONE }
         
         - button:
-            id: btn_diaporama
+            id: btn_activite
             x: 15
             y: 190
             width: 135
             height: 40
             widgets:
               - label:
-                  text: "Diaporama"
+                  text: "Activités HAOS"
                   text_font: font_normal
                   align: LV_ALIGN_CENTER
             on_click:
-              - script.stop: gestion_veille
               - script.execute: bip_discret
               - lvgl.page.show:
-                  id: page_diaporama
+                  id: page_activite
                   animation: LV_SCREEN_LOAD_ANIM_NONE
-              #- script.execute: boucle_diaporama
 
         # Bouton UPS - Hydro
         - button:
@@ -1496,21 +1487,18 @@ lvgl:
                   align: LV_ALIGN_CENTER
             on_click:
               - script.execute: bip_discret
-              - lambda: |-
-                  id(timeout_veille) = id(sauvegarde_veille).state;
               - lvgl.label.update:
                   id: lbl_config_veille
                   text: !lambda |-
-                    if (id(timeout_veille) == 0) {
+                    int val = (int)id(sauvegarde_veille).state;
+                    if (val == 0) {
                       return std::string("Veille: Off");
                     } else {
-                      return str_sprintf("Veille: %ds", id(timeout_veille));
+                      return str_sprintf("Veille: %ds", val);
                     }
               - lvgl.page.show:
                   id: page_config
                   animation: LV_SCREEN_LOAD_ANIM_NONE
-
-
 
     # SOUS-PAGE : Climat
     - id: page_climat
@@ -3539,37 +3527,49 @@ lvgl:
             text_font: font_normal
 
     # Sous-PAGE Cadre Numérique
-    - id: page_diaporama
+    - id: page_activite
       widgets:
-        - image:
-            id: photo_diapo_display
-            src: image_diaporama
-            width: 320
-            height: 240
-            x: 0
-            y: 0
+        # ==================== ENTÊTE & RETOUR ====================
+        # Titre de la page
+        - label:
+            text: Activités HAOS
+            x: 60
+            y: 10
+            text_font: font_titre
+
+        # Bouton Retour au Menu
+        - button:
+            x: 255
+            y: 5
+            width: 60
+            height: 24
+            widgets:
+              - label:
+                  text: "Menu"
+                  align: LV_ALIGN_CENTER
             on_click:
               - script.execute: bip_discret
-              - script.stop: boucle_diaporama
               - lvgl.page.show:
                   id: page_menu
                   animation: LV_SCREEN_LOAD_ANIM_NONE
 
+        # --- LIGNE DE SÉPARATION ---
+        - obj:
+            x: 20
+            y: 50
+            width: 270
+            height: 6
+            bg_color: 0x333333
+
+        # ==================== LISTE D'ACTIVITÉS ====================
         - label:
-            id: label_description_diapo
-            text: "Initialisation du diaporama..."
+            id: journal_label_id
+            text: En Attente...
+            x: 15
+            y: 70
+            width: 290
             text_font: font_normal
-            text_color: 0xFFFFFF
-            x: 10
-            y: 200
-            width: 300
-            long_mode: WRAP
-            on_click:
-              - script.execute: bip_discret
-              - script.stop: boucle_diaporama
-              - lvgl.page.show:
-                  id: page_menu
-                  animation: LV_SCREEN_LOAD_ANIM_NONE
+            text_align: LV_TEXT_ALIGN_CENTER
 
 
 #
