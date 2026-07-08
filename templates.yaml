@@ -77,7 +77,11 @@
   condition:
     - condition: template
       value_template: >
+        {# On place les commentaires ici, HORS des accolades de calcul #}
+        {# 1. Domaines autorisés | 2. Exclusion CYD/Passe-partout | 3. Changements réels #}
         {{ trigger.event.data.entity_id.split('.')[0] in ['light', 'switch', 'binary_sensor'] 
+           and 'passe_partout' not in trigger.event.data.entity_id
+           and 'cyd' not in trigger.event.data.entity_id
            and trigger.event.data.new_state is not none 
            and trigger.event.data.old_state is not none
            and trigger.event.data.new_state.state != trigger.event.data.old_state.state
@@ -89,15 +93,12 @@
       icon: mdi:history
       attributes:
         journal: >
-          {# On récupère l'historique déjà existant dans le capteur pour ne pas le perdre #}
           {% set current = this.attributes.journal if this is defined and this is not none and 'journal' in this.attributes else '' %}
           
-          {# Extraction des infos de l'entité qui vient de changer #}
           {% set entity_id = trigger.event.data.entity_id %}
           {% set friendly_name = state_attr(entity_id, 'friendly_name') or entity_id %}
           {% set new_state = trigger.event.data.new_state.state %}
           
-          {# Traduction intelligente selon la catégorie de l'appareil (device_class) #}
           {% set dev_class = state_attr(entity_id, 'device_class') %}
           {% if new_state == 'on' %}
             {% set msg = 'détecté' if dev_class in ['motion', 'occupancy'] else 'ouvert' if dev_class in ['door', 'window', 'garage'] else 'allumé' %}
@@ -105,11 +106,9 @@
             {% set msg = 'normal' if dev_class in ['motion', 'occupancy'] else 'fermé' if dev_class in ['door', 'window', 'garage'] else 'éteint' %}
           {% endif %}
           
-          {# Construction de la nouvelle ligne #}
           {% set time = now().strftime('%H:%M') %}
           {% set new_line = "[" ~ time ~ "] " ~ friendly_name ~ " : " ~ msg %}
           
-          {# Découpage du texte existant, ajout de la ligne au sommet et restriction aux 6 dernières entrées #}
           {% set lines = current.split('\n') if current else [] %}
           {% set lines = [new_line] + lines %}
           {{ lines[:6] | join('\n') }}
