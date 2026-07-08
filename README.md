@@ -103,9 +103,9 @@ Here is a look at the various menus and widgets designed to make the most out of
 | :---: | :---: |
 | ![Rear Details](batterie-look%20%287%29.jpg) | ![Widget 4](passe-partout%20%284%29.jpg) |
 
-### 🖼️ New Menus, Photo Frame & Wi-Fi Workaround
+### 🖼️ New Menus, Activities & Wi-Fi Workaround
 
-The main interface has been upgraded with a new grid-based tab layout to accommodate advanced system monitoring controls and an upcoming interactive media frame.
+The main interface has been upgraded with a new grid-based tab layout to accommodate advanced system monitoring controls and an Home Assistant Activities panel.
 
 | Main Matrix Menu | Home Assistant Activities | Settings Page |
 | :---: | :---: | :---: |
