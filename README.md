@@ -44,15 +44,15 @@ Voici un aperçu des différents menus et widgets développés pour optimiser l'
 | :---: | :---: |
 | ![Détails arrière](batterie-look%20%287%29.jpg) | ![Widget 4](passe-partout%20%284%29.jpg) |
 
-### 🖼️ Nouveaux Menus, Cadre Photo & Solution Wi-Fi
+### 🖼️ Nouveaux Menus, Activités HAOS & Solution Wi-Fi
 
 L'interface s'est récemment enrichie d'une matrice d'onglets réorganisée pour accueillir de nouvelles fonctionnalités majeures, incluant un panneau de gestion système et un panneau d'activités de Home Assistant.
 
-| Menu Principal (Matrice) | Mode Diaporama (En construction) | Page de Configuration Terminée |
+| Menu Principal (Matrice) | Mode Activités HAOS | Page de Configuration |
 | :---: | :---: | :---: |
 | ![Menu Principal Actuel](config-diapo%20%281%29.jpg) | ![Mode Cadre Numérique](config-diapo%20%282%29.jpg) | ![Page de Configuration](config-diapo%20%283%29.jpg) |
 
-#### ⚙️ Page « Configuration » (Complétée)
+#### ⚙️ Page « Configuration »
 Ce panneau technique permet un contrôle complet du comportement de l'appareil en local :
 - **Gestion de la veille :** Réglage dynamique du délai d'extinction de l'écran (avec affichage du statut actif/inactif et boutons `+` / `-`).
 - **Bouton de Redémarrage (Solution Wi-Fi Zombie) :** Les microcontrôleurs gèrent difficilement le *roaming* automatique (itinérance) entre des routeurs d'architectures différentes (comme une borne principale Bell Giga Hub et un routeur secondaire TP-Link Archer). L'ESP32 pouvant rester accroché à un signal fantôme ou être rejeté par le protocole agressif de routage, l'intégration d'un bouton matériel `Redémarrage` (via la plateforme native `restart` d'ESPHome) offre un contournement logiciel parfait. Un simple clic relance l'appareil en moins de 2 secondes pour qu'il s'associe instantanément à la borne la plus proche, évitant ainsi d'avoir à manipuler physiquement les câbles d'alimentation.
@@ -107,11 +107,11 @@ Here is a look at the various menus and widgets designed to make the most out of
 
 The main interface has been upgraded with a new grid-based tab layout to accommodate advanced system monitoring controls and an upcoming interactive media frame.
 
-| Main Matrix Menu | Slideshow Mode (WIP) | Completed Settings Page |
+| Main Matrix Menu | Home Assistant Activities | Settings Page |
 | :---: | :---: | :---: |
 | ![Main Menu Matrix](config-diapo%20%281%29.jpg) | ![Digital Photo Frame](config-diapo%20%282%29.jpg) | ![Configuration Page](config-diapo%20%283%29.jpg) |
 
-#### ⚙️ "Configuration" Page (Completed)
+#### ⚙️ "Configuration" Page
 This newly deployed technical panel gives full local control over hardware behavior:
 - **Display Timeout Handling:** Dynamically adjust the screen sleep timeout delay using dedicated `+` and `-` buttons (complete with On/Off status visualization).
 - **Reboot Button (Wi-Fi Zombie Fix):** Microcontrollers often struggle with seamless *roaming* between distinct router brands (e.g., a primary ISP Bell Giga Hub and a secondary TP-Link Archer access point). The ESP32 can get trapped in "zombie connection" loops or rejected by aggressive band-steering protocols. Integrating a software `Redémarrage` (Reboot) button via ESPHome's native `restart` platform offers an elegant solution. A single tap safely reboots the CYD in less than 2 seconds, forcing it to immediately hook into the nearest available router without needing to manually unplug power cords.
