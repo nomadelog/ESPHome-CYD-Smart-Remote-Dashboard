@@ -66,6 +66,7 @@ L'onglet **Activités HAOS** contient les dernières activités affichées dans 
 ### 🗂️ Structure du Répertoire
 
 - `passe-partout.yaml` : Le fichier de configuration principal ESPHome (3600+ lignes).
+- `templates.yaml` : Le fichier de sensors et triggers à créer dans Home Assistant
 - `secrets.yaml` *(Non inclus)* : À créer chez vous pour vos accès Wi-Fi et clés d'API.
 
 ---
@@ -126,7 +127,8 @@ This newly deployed technical panel gives full local control over hardware behav
 1. Create a dedicated folder for this project in your ESPHome directory.
 2. Drop the provided `passe-partout.yaml` configuration file into it, adjusting it to match your Home Assistant entity names.
 3. Create your own `secrets.yaml` file with your Wi-Fi credentials and API keys.
-4. Flash your CYD using your PowerShell terminal environment (`esphome run your_file.yaml`) and enjoy!
+4. Create your `templates.yaml` in Home Assistant (HAOS)
+5. Flash your CYD using your PowerShell terminal environment (`esphome run your_file.yaml`) and enjoy!
 
 ---
 *Developed with passion by a smart home enthusiast for the open-source community.*
