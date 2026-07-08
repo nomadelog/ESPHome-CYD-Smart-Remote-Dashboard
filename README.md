@@ -109,7 +109,7 @@ The main interface has been upgraded with a new grid-based tab layout to accommo
 
 | Main Matrix Menu | Home Assistant Activities | Settings Page |
 | :---: | :---: | :---: |
-| ![Main Menu Matrix](config-diapo%20%281%29.jpg) | ![Digital Photo Frame](config-diapo%20%282%29.jpg) | ![Configuration Page](config-diapo%20%283%29.jpg) |
+| ![Main Menu Matrix](config-diapo%20%28a%29.jpg) | ![Digital Photo Frame](config-diapo%20%28b%29.jpg) | ![Configuration Page](config-diapo%20%283%29.jpg) |
 
 #### ⚙️ "Configuration" Page
 This newly deployed technical panel gives full local control over hardware behavior:
