@@ -50,7 +50,7 @@ L'interface s'est récemment enrichie d'une matrice d'onglets réorganisée pour
 
 | Menu Principal (Matrice) | Mode Activités HAOS | Page de Configuration |
 | :---: | :---: | :---: |
-| ![Menu Principal Actuel](config-diapo%20%281%29.jpg) | ![Mode Cadre Numérique](config-diapo%20%282%29.jpg) | ![Page de Configuration](config-diapo%20%283%29.jpg) |
+| ![Menu Principal Actuel](config-diapo%20%28a%29.jpg) | ![Mode Cadre Numérique](config-diapo%20%28b%29.jpg) | ![Page de Configuration](config-diapo%20%283%29.jpg) |
 
 #### ⚙️ Page « Configuration »
 Ce panneau technique permet un contrôle complet du comportement de l'appareil en local :
