@@ -46,7 +46,7 @@ Voici un aperçu des différents menus et widgets développés pour optimiser l'
 
 ### 🖼️ Nouveaux Menus, Cadre Photo & Solution Wi-Fi
 
-L'interface s'est récemment enrichie d'une matrice d'onglets réorganisée pour accueillir de nouvelles fonctionnalités majeures, incluant un panneau de gestion système et un mode cadre numérique interactif.
+L'interface s'est récemment enrichie d'une matrice d'onglets réorganisée pour accueillir de nouvelles fonctionnalités majeures, incluant un panneau de gestion système et un panneau d'activités de Home Assistant.
 
 | Menu Principal (Matrice) | Mode Diaporama (En construction) | Page de Configuration Terminée |
 | :---: | :---: | :---: |
@@ -60,8 +60,8 @@ Ce panneau technique permet un contrôle complet du comportement de l'appareil e
 - **Contrôle de la LED RVB arrière :** Boutons d'activation directe des couleurs (`Bleu`, `Vert`, `Rouge`) ou extinction complète (`OFF`).
 - **Diagnostics Réseau en Temps Réel :** Affichage en direct du nom d'hôte local (`.local`), de l'heure système précise et de la force réelle du signal Wi-Fi mesurée en `dBm`.
 
-#### 🖼️ Projet « Diaporama » (En développement)
-L'onglet **Diaporama** pose les bases d'un mode cadre photo numérique. Ce module est conçu pour afficher des grilles d'images et des photos de paysages récupérées de manière automatisée. Le déploiement à venir prévoit l'utilisation d'un script Python externe chargé de traiter, redimensionner en lot et sérialiser les images locales afin qu'elles soient parfaitement adaptées à la mémoire et à la résolution native de l'écran du CYD.
+#### 🖼️ Page « Activités HAOS »
+L'onglet **Activités HAOS** contient les dernières activités affichées dans le dashboard correspondant de Home assistant.
 
 ### 🗂️ Structure du Répertoire
 
@@ -119,8 +119,7 @@ This newly deployed technical panel gives full local control over hardware behav
 - **Rear RGB LED Controller:** Directly override and trigger custom back-lighting colors (`Blue`, `Green`, `Red`) or turn it completely `OFF`.
 - **Live Infrastructure Telemetry:** Monitors and prints local mDNS hostname (`.local`), precise system clock sync, and real-time Wi-Fi signal strength values measured in `dBm`.
 
-#### 🖼️ "Diaporama" Slideshow Project (Work in Progress)
-The **Diaporama** tab serves as the interface foundation for a custom digital picture frame. The feature is being built to showcase automated photo grids and landscapes. Future updates will introduce an automated external Python script optimized to process, batch-resize, and serialize local image folders so they match the hardware limitations and native layout resolution of the CYD display.
+#### 🖼️ "Activités HAOS" panel showing the last few activities in Home Assistant.
 
 ### 🚀 Quick Start
 
