@@ -1,0 +1,118 @@
+- sensor:
+    - name: "Passe-Partout Volume JBL"
+      unique_id: passe_partout_volume_jbl
+      state: "{{ state_attr('media_player.salle_de_sejour_2', 'volume_level') | float(0) * 100 }}"
+      unit_of_measurement: "%"
+
+    - name: "Date Longue CYD"
+      unique_id: date_longue_cyd
+      state: >
+        {% set jours = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"] %}
+        {% set mois = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"] %}
+        {{ jours[now().strftime('%w') | int] }} {{ now().day }} {{ mois[now().month - 1] }} {{ now().year }}
+
+    - name: "Passe Partout - Titre Actuel"
+      state: >
+        {{ state_attr('media_player.salle_de_sejour_2', 'media_title') | default('Aucune musique', true) }}
+      icon: mdi:music-note
+
+    - name: "Passe Partout - Artiste Actuel"
+      state: >
+        {{ state_attr('media_player.salle_de_sejour_2', 'media_artist') | default('Inconnu', true) }}
+      icon: mdi:account-music
+
+    - name: "Passe Partout - Statut Lecture"
+      state: >
+        {{ states('media_player.salle_de_sejour_2') }}
+
+- trigger:
+    - platform: time_pattern
+      minutes: "/15"
+    - platform: homeassistant
+      event: start
+  action:
+    - action: calendar.get_events
+      target:
+        entity_id: calendar.entre_buttes
+      data:
+        start_date_time: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+        end_date_time: "{{ (now() + timedelta(days=60)).strftime('%Y-%m-%d %H:%M:%S') }}"
+      response_variable: agenda
+  sensor:
+    - name: "Agenda CYD Formate"
+      unique_id: agenda_cyd_formate
+      state: >
+        {% set mois_fr = {
+          'Jan': 'janvier', 'Feb': 'février', 'Mar': 'mars', 'Apr': 'avril', 
+          'May': 'mai', 'Jun': 'juin', 'Jul': 'juillet', 'Aug': 'août', 
+          'Sep': 'septembre', 'Oct': 'octobre', 'Nov': 'novembre', 'Dec': 'décembre',
+          'January': 'janvier', 'February': 'février', 'March': 'mars', 'April': 'avril',
+          'June': 'juin', 'July': 'juillet', 'August': 'août', 'September': 'septembre',
+          'October': 'octobre', 'November': 'novembre', 'December': 'décembre'
+        } %}
+        
+        {% set ns = namespace(events=[]) %}
+        {% if agenda['calendar.entre_buttes'] is defined and agenda['calendar.entre_buttes'].events | length > 0 %}
+          {% set ns.events = agenda['calendar.entre_buttes'].events %}
+        {% elif agenda.events is defined and agenda.events | length > 0 %}
+          {% set ns.events = agenda.events %}
+        {% endif %}
+
+        {% if ns.events | length > 0 %}
+          {%- for ev in ns.events -%}
+            {%- set jour = ev.start | as_timestamp | timestamp_custom('%e') | trim -%}
+            {%- set mois_en = ev.start | as_timestamp | timestamp_custom('%B') -%}
+            {%- set mois = mois_fr[mois_en] if mois_en in mois_fr else mois_en -%}
+            {{ jour }} {{ mois }} --> {{ ev.summary }}{{ '\n' if not loop.last }}
+          {%- endfor -%}
+        {% else %}
+          Aucun événement à venir
+        {% endif %}
+#
+#
+#
+- trigger:
+    - platform: event
+      event_type: state_changed
+  condition:
+    - condition: template
+      value_template: >
+        {{ trigger.event.data.entity_id.split('.')[0] in ['light', 'switch', 'binary_sensor'] 
+           and trigger.event.data.new_state is not none 
+           and trigger.event.data.old_state is not none
+           and trigger.event.data.new_state.state != trigger.event.data.old_state.state
+           and trigger.event.data.new_state.state not in ['unavailable', 'unknown'] }}
+  sensor:
+    - name: "Dernieres Activites CYD"
+      unique_id: dernieres_activites_cyd
+      state: "{{ now().strftime('%H:%M') }}"
+      icon: mdi:history
+      attributes:
+        journal: >
+          {# On récupère l'historique déjà existant dans le capteur pour ne pas le perdre #}
+          {% set current = this.attributes.journal if this is defined and this is not none and 'journal' in this.attributes else '' %}
+          
+          {# Extraction des infos de l'entité qui vient de changer #}
+          {% set entity_id = trigger.event.data.entity_id %}
+          {% set friendly_name = state_attr(entity_id, 'friendly_name') or entity_id %}
+          {% set new_state = trigger.event.data.new_state.state %}
+          
+          {# Traduction intelligente selon la catégorie de l'appareil (device_class) #}
+          {% set dev_class = state_attr(entity_id, 'device_class') %}
+          {% if new_state == 'on' %}
+            {% set msg = 'détecté' if dev_class in ['motion', 'occupancy'] else 'ouvert' if dev_class in ['door', 'window', 'garage'] else 'allumé' %}
+          {% else %}
+            {% set msg = 'normal' if dev_class in ['motion', 'occupancy'] else 'fermé' if dev_class in ['door', 'window', 'garage'] else 'éteint' %}
+          {% endif %}
+          
+          {# Construction de la nouvelle ligne #}
+          {% set time = now().strftime('%H:%M') %}
+          {% set new_line = "[" ~ time ~ "] " ~ friendly_name ~ " : " ~ msg %}
+          
+          {# Découpage du texte existant, ajout de la ligne au sommet et restriction aux 6 dernières entrées #}
+          {% set lines = current.split('\n') if current else [] %}
+          {% set lines = [new_line] + lines %}
+          {{ lines[:6] | join('\n') }}
+#
+#
+#
