@@ -414,11 +414,6 @@ font:
       - "éèàùçêëîïôöûüÉÈÙÇÊËÎÏÔÖÛÜáâäãåæñóòõœýÿÁÂÄÃÅÆÑÓÒÕŒÝŸ"
       - "“”«»„†‡•…‰¿¡€£¢¥¤§©®™±×÷²³µ"
 
-image:
-  - file: "sd/images/diapo_001.jpg" # Image tampon de départ
-    id: image_diaporama
-    type: RGB565
-
 # Écran branché sur son bus dédié
 display:
   - platform: ili9xxx
