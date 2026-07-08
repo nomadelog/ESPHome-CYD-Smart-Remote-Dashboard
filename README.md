@@ -8,7 +8,7 @@
 
 Bienvenue dans ce projet de panneau de contrôle domotique ultra-optimisé pour le **CYD (Cheap Yellow Display)**, modèle **ESP32-2432S028R** (version révisée avec 2 ports USB : Micro-USB et USB-C). 
 
-Ce projet pousse ESPHome et la bibliothèque graphique **LVGL** dans leurs derniers retranchements avec une configuration robuste de **plus de 3 600 lignes de code**, entièrement nettoyée, compressée et exempte de lignes superflues pour garantir une compilation stable sur ESP32.
+Ce projet pousse ESPHome et la bibliothèque graphique **LVGL** dans leurs derniers retranchements avec une configuration robuste de **plus de 3 500 lignes de code**, entièrement nettoyée, compressée et exempte de lignes superflues pour garantir une compilation stable sur ESP32.
 
 ![Interface Principale](batterie-look%20%284%29.jpg)
 
@@ -75,7 +75,7 @@ L'onglet **Activités HAOS** contient les dernières activités affichées dans 
 
 Welcome to this ultra-optimized smart home control panel project for the **CYD (Cheap Yellow Display)**, model **ESP32-2432S028R** (revised version featuring 2 USB ports: Micro-USB and USB-C).
 
-This project pushes ESPHome and the **LVGL** graphics library to their absolute limits with a robust configuration of **over 3,600 lines of code**, fully cleaned, compressed, and free of unnecessary lines to ensure stable compilation and flashing via command line (PowerShell).
+This project pushes ESPHome and the **LVGL** graphics library to their absolute limits with a robust configuration of **over 3,500 lines of code**, fully cleaned, compressed, and free of unnecessary lines to ensure stable compilation and flashing via command line (PowerShell).
 
 ### ✨ Key Features
 
