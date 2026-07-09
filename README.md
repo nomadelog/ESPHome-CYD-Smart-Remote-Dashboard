@@ -65,7 +65,7 @@ L'onglet **Activités HAOS** contient les dernières activités affichées dans 
 
 ### 🗂️ Structure du Répertoire
 
-- `passe-partout.yaml` : Le fichier de configuration principal ESPHome (3600+ lignes).
+- `passe-partout.yaml` : Le fichier de configuration principal ESPHome.
 - `templates.yaml` : Le fichier de sensors et triggers à créer dans Home Assistant
 - `secrets.yaml` *(Non inclus)* : À créer chez vous pour vos accès Wi-Fi et clés d'API.
 
