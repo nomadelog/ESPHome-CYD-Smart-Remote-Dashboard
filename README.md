@@ -57,7 +57,7 @@ Ce panneau technique permet un contrôle complet du comportement de l'appareil e
 - **Gestion de la veille :** Réglage dynamique du délai d'extinction de l'écran (avec affichage du statut actif/inactif et boutons `+` / `-`).
 - **Bouton de Redémarrage (Solution Wi-Fi Zombie) :** Les microcontrôleurs gèrent difficilement le *roaming* automatique (itinérance) entre des routeurs d'architectures différentes (comme une borne principale Bell Giga Hub et un routeur secondaire TP-Link Archer). L'ESP32 pouvant rester accroché à un signal fantôme ou être rejeté par le protocole agressif de routage, l'intégration d'un bouton matériel `Redémarrage` (via la plateforme native `restart` d'ESPHome) offre un contournement logiciel parfait. Un simple clic relance l'appareil en moins de 2 secondes pour qu'il s'associe instantanément à la borne la plus proche, évitant ainsi d'avoir à manipuler physiquement les câbles d'alimentation.
 - **Rétroaction audio :** Bouton de test du haut-parleur interne et indicateur d'état des bips système (`ACTIF` / `MUET`).
-- **Contrôle de la LED RVB arrière :** Boutons d'activation directe des couleurs (`Bleu`, `Vert`, `Rouge`) ou extinction complète (`OFF`).
+- **Contrôle de la DEL RVB arrière :** Boutons d'activation directe des couleurs (`Bleu`, `Vert`, `Rouge`) ou extinction complète (`OFF`).
 - **Diagnostics Réseau en Temps Réel :** Affichage en direct du nom d'hôte local (`.local`), de l'heure système précise et de la force réelle du signal Wi-Fi mesurée en `dBm`.
 
 #### 🖼️ Page « Activités HAOS »
