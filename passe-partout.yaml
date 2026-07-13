@@ -1,5 +1,4 @@
-# Fichier ~\ESPHome\passe-partout.yaml
-
+---
 esphome:
   name: passe-partout
   friendly_name: "Passe-Partout"
